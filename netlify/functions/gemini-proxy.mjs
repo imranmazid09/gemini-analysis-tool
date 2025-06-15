@@ -1,47 +1,40 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export const handler = async (event) => {
-  // Check for the secret API key in the environment variables
+  console.log("LOG 1: Function starting...");
+
   if (!process.env.GEMINI_API_KEY) {
+    console.error("LOG 2: API key not found.");
     return {
       statusCode: 500,
       body: JSON.stringify({ error: "API key not found in environment." }),
     };
   }
+  console.log("LOG 3: API key found.");
 
-  // Prepare the API client with the secret key
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
   try {
-    // Get the user's data from the browser's request
     const { posts, analysisType } = JSON.parse(event.body);
+    console.log(`LOG 4: Received ${posts.length} posts for ${analysisType} analysis.`);
 
-    // Generate the specific prompt to send to the Gemini API
-    const prompt = `You are a social media text analysis expert. Analyze the following ${posts.length} posts for ${analysisType}. Provide the results as a single JSON object.
+    const prompt = `You are a social media text analysis expert. Analyze the following posts for ${analysisType}. Provide results as a single JSON object. Posts: ${posts.join("\n")}`;
 
-    Posts:
-    ${posts.join("\n")}
-    `;
-
-    // Call the Gemini API
+    console.log("LOG 5: Calling Gemini API...");
     const result = await model.generateContent(prompt);
+    console.log("LOG 6: Gemini API call finished.");
+
     const response = result.response;
     const text = response.text();
 
-    // Send the AI's response back to the browser
-    return {
-      statusCode: 200,
-      body: text,
-    };
+    return { statusCode: 200, body: text };
 
   } catch (error) {
-    console.error("Error calling Gemini API:", error);
+    console.error("LOG 7: Error during function execution:", error);
     return {
       statusCode: 500,
-      body: JSON.stringify({
-        error: "An error occurred while communicating with the AI.",
-      }),
+      body: JSON.stringify({ error: "An error occurred inside the function." }),
     };
   }
 };

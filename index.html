@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Social Media Text Analysis Tool - Dr. Imran Mazid</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header class="main-header">
+        <h1>Social Media Text Analysis Tool</h1>
+        <p class="author-name">Developed by Dr. Imran Mazid</p>
+    </header>
+
+    <main class="container">
+        <section id="dataInputSection" class="tool-section">
+            <h2>1. Input Your Social Media Data</h2>
+            <div class="input-instructions">
+                <p>You can either paste social media text (up to 500 posts, one post per line/separated by blank lines) directly into the text area below, or upload a file.</p>
+                <details class="file-instructions">
+                    <summary>File Upload Instructions & Formatting Guidelines</summary>
+                    <ul>
+                        <li><strong>Supported file types:</strong> <code>.txt</code>, <code>.csv</code></li>
+                        <li><strong>For <code>.txt</code> files:</strong> Ensure each social media post is on a new line. If a single post has multiple lines, please ensure posts are separated by at least two blank lines (one empty line between posts).</li>
+                        <li>
+                            <strong>For <code>.csv</code> files (Excel/Google Sheets):</strong>
+                            <ul>
+                                <li>Ensure your social media posts are in a single cell in the first column, with one post per row.</li>
+                                <li>If a post within a cell has multiple lines (e.g., you pressed Alt+Enter in Excel), most spreadsheet programs will automatically enclose that cell's content in double quotes when you "Save As CSV". Papa Parse (the library used) is robust and can handle various CSV quoting and newline scenarios effectively.</li>
+                                <li>**Advanced Excel Tip:** To force quotes around every post (even single-line ones or those with commas), you can use a formula. If your original text is in cell A1, in an empty cell (e.g., B1) enter: <code>=CHAR(34) & A1 & CHAR(34)</code>. Drag this formula down for all your posts. Then, <strong>copy the new column (B) and paste it back onto itself by right-clicking and choosing 'Paste Special' > 'Values'.</strong> Now, column B will have each post correctly wrapped in quotes, ready for CSV export.</li>
+                            </ul>
+                        </li>
+                        <li><strong>Character Encoding:</strong> UTF-8 is recommended for best compatibility.</li>
+                        <li><strong>Post Limit:</strong> Please use up to 500 posts for optimal performance.</li>
+                    </ul>
+                </details>
+            </div>
+
+            <div class="input-method">
+                <label for="textInput">Paste your social media posts here (one post per line, or posts separated by blank lines):</label>
+                <textarea id="textInput" rows="10" placeholder="Example Post 1...\n\nExample Post 2 (can be multi-line if separated by blank lines from others)...\n\n...up to 500 posts"></textarea>
+            </div>
+            <div class="input-method">
+                <label for="fileUpload">Or upload a file (<code>.txt</code> or <code>.csv</code>):</label>
+                <input type="file" id="fileUpload" accept=".txt,.csv">
+            </div>
+            <div id="postCountInfo" class="post-count-info">Posts detected: 0</div>
+        </section>
+
+        <section id="analysisSelectionSection" class="tool-section">
+            <h2>2. Select Analysis Method & Options</h2>
+            <div class="analysis-type-selector">
+                <label><input type="radio" name="analysisType" value="sentiment" checked> Sentiment Analysis</label>
+                <label><input type="radio" name="analysisType" value="network"> Semantic Network Analysis</label>
+                <label><input type="radio" name="analysisType" value="topic"> Topic Modeling</label>
+            </div>
+
+            <div id="controlsSentiment" class="analysis-controls active">
+                <p>Sentiment analysis will classify the overall emotional tone of the provided texts as positive, negative, or neutral.</p>
+            </div>
+            <div id="controlsNetwork" class="analysis-controls">
+                <h4>Semantic Network Analysis Options:</h4>
+                <div>
+                    <label for="networkNumNodes">Number of Top Words (Nodes) to Display:</label>
+                    <input type="number" id="networkNumNodes" value="20" min="5" max="50">
+                </div>
+                <div>
+                    <label for="networkMinCooccurrence">Minimum Co-occurrence Frequency for Links:</label>
+                    <input type="number" id="networkMinCooccurrence" value="2" min="1" max="10">
+                </div>
+            </div>
+            <div id="controlsTopic" class="analysis-controls">
+                <h4>Topic Modeling Options:</h4>
+                <div>
+                    <label for="topicNumTopics">Number of Topics to Generate (K):</label>
+                    <select id="topicNumTopics">
+                        <option value="3">3 Topics</option>
+                        <option value="5" selected>5 Topics</option>
+                        <option value="7">7 Topics</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="topicWordsPerTopic">Number of Top Words per Topic to Display:</label>
+                    <input type="number" id="topicWordsPerTopic" value="7" min="3" max="15">
+                </div>
+            </div>
+        </section>
+
+        <section class="action-buttons tool-section">
+            <button id="analyzeButton">Analyze Text</button>
+            <button id="resetButton">Start A New Text Analysis</button>
+        </section>
+
+        <section id="outputArea" class="tool-section" style="display: none;"> <div class="loading-indicator" id="loadingIndicator" style="display: none;">
+                <p>Analyzing your text, please wait...</p>
+                <div class="spinner"></div>
+            </div>
+
+            <h2>3. Analysis Results for <span id="activeAnalysisTitle"></span></h2>
+            
+            <div id="resultsSummary" class="output-subsection">
+                <h3>Results Summary</h3>
+                <div id="summaryContentPlaceholder"><p>Summary of the analysis will appear here...</p></div>
+            </div>
+
+            <div id="visualizationArea" class="output-subsection">
+                <h3>Visualization</h3>
+                <div id="visualizationPlaceholder"><p>Data visualization will appear here...</p></div>
+            </div>
+
+            <div id="interpretationInsights" class="output-subsection">
+                <h3>Interpretation & Strategic Insights</h3>
+                <div id="interpretationPlaceholder"><p>Interpretation of results and example strategic insights will appear here...</p></div>
+            </div>
+            
+            <div id="networkAssociatedPosts" class="output-subsection" style="display: none;">
+                <h3>Posts Associated with Key Network Elements / Topics</h3>
+                <div id="associatedPostsPlaceholder"><p>Posts related to selected network nodes/edges or topics will appear here...</p></div>
+            </div>
+
+            <div id="technicalReport" class="output-subsection">
+                <details>
+                    <summary>Technical Report (Computational Techniques & Process)</summary>
+                    <div id="technicalReportContentPlaceholder">
+                        <h4>Computational Techniques Used:</h4>
+                        <p>Details about the specific algorithms or methods used will appear here.</p>
+                        <h4>Process of Data Analysis (Simplified for Reporting):</h4>
+                        <p>A non-technical explanation of the data analysis steps will appear here.</p>
+                    </div>
+                </details>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 Social Media Text Analysis Tool - Dr. Imran Mazid</p>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script> 
+    <script src="scripts.js"></script>
+</body>
+</html>

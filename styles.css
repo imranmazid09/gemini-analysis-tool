@@ -1,0 +1,382 @@
+/* General Body and Page Styles */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    margin: 0;
+    padding: 0;
+    background-color: #f4f7f6; /* Light, calming background */
+    color: #333;
+    font-size: 16px;
+}
+
+.container {
+    width: 90%;
+    max-width: 960px;
+    margin: 20px auto;
+    padding: 25px;
+    background-color: #fff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+}
+
+.main-header {
+    background-color: #00695c; /* Teal/Green for a professional, analytical feel */
+    color: #fff;
+    text-align: center;
+    padding: 20px 15px;
+    border-bottom: 4px solid #004d40; /* Darker accent */
+}
+
+.main-header h1 {
+    margin: 0;
+    font-size: 2.2em;
+    font-weight: 600;
+}
+
+.author-name {
+    font-size: 0.9em;
+    margin-top: 5px;
+    opacity: 0.9;
+}
+
+/* Tool Sections */
+.tool-section {
+    margin-bottom: 30px;
+    padding: 20px;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    background-color: #fdfdfd;
+}
+
+.tool-section:last-child {
+    margin-bottom: 0;
+}
+
+.tool-section h2 {
+    font-size: 1.6em;
+    color: #004d40; /* Darker teal for section headers */
+    margin-top: 0;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #b2dfdb; /* Light teal underline */
+    padding-bottom: 10px;
+}
+
+/* Input Section Styles */
+.input-instructions p {
+    margin-bottom: 10px;
+    font-size: 0.95em;
+    color: #555;
+}
+
+.file-instructions {
+    background-color: #e0f2f1; /* Light teal for instructions box */
+    border: 1px solid #b2dfdb;
+    padding: 15px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+    font-size: 0.9em;
+}
+
+.file-instructions summary {
+    font-weight: bold;
+    cursor: pointer;
+    color: #00695c;
+}
+
+.file-instructions ul {
+    margin-top: 10px;
+    padding-left: 20px;
+}
+.file-instructions ul ul { /* Nested list for CSV specific instructions */
+    margin-top: 5px;
+    padding-left: 15px;
+}
+
+
+.input-method {
+    margin-bottom: 20px;
+}
+
+.input-method label,
+.analysis-controls label {
+    display: block;
+    font-weight: 500; 
+    margin-bottom: 8px;
+    color: #004d40;
+}
+
+textarea#textInput {
+    width: calc(100% - 22px); 
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1em;
+    min-height: 150px;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+input[type="file"] {
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background-color: #fff;
+    cursor: pointer;
+}
+.post-count-info {
+    font-size: 0.9em;
+    color: #555;
+    margin-top: 5px;
+    text-align: right;
+    min-height: 1.2em; 
+}
+
+
+/* Analysis Selection and Controls */
+.analysis-type-selector {
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 1px dashed #ccc;
+    display: flex;
+    flex-wrap: wrap; 
+    gap: 10px; 
+}
+.analysis-type-selector label {
+    margin-right: 15px;
+    font-weight: normal;
+    color: #333;
+    cursor: pointer;
+    display: inline-flex; 
+    align-items: center;
+}
+.analysis-type-selector input[type="radio"] {
+    margin-right: 5px;
+    vertical-align: middle;
+}
+
+.analysis-controls {
+    display: none; 
+    padding: 15px;
+    background-color: #e8f5e9; 
+    border-radius: 4px;
+    margin-top: 10px;
+    border: 1px solid #c8e6c9;
+}
+.analysis-controls.active {
+    display: block;
+}
+.analysis-controls h4 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: #1b5e20; 
+    font-size: 1.1em;
+}
+.analysis-controls div {
+    margin-bottom: 12px;
+}
+.analysis-controls input[type="number"],
+.analysis-controls select {
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    margin-left: 5px;
+    max-width: 80px;
+    box-sizing: border-box;
+}
+
+/* Action Buttons */
+.action-buttons {
+    text-align: center;
+    padding-top: 10px; 
+}
+.action-buttons button {
+    background-color: #00796b; 
+    color: white;
+    border: none;
+    padding: 12px 25px;
+    margin: 5px 10px; 
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1.05em;
+    font-weight: 500;
+    transition: background-color 0.2s ease, opacity 0.2s ease;
+}
+.action-buttons button:hover {
+    background-color: #004d40; 
+}
+.action-buttons button:disabled {
+    background-color: #aaa;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+button#resetButton {
+    background-color: #757575; 
+}
+button#resetButton:hover {
+    background-color: #616161;
+}
+
+/* Output Area Styles */
+#outputArea {
+    margin-top: 30px;
+    border-top: 2px solid #00695c;
+}
+.output-subsection {
+    margin-bottom: 25px;
+    padding: 15px;
+    background-color: #fff; 
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+}
+.output-subsection h3 {
+    font-size: 1.3em;
+    color: #004d40;
+    margin-top: 0;
+    margin-bottom: 15px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #b2dfdb;
+}
+#visualizationPlaceholder, 
+#summaryContentPlaceholder, 
+#interpretationPlaceholder,
+#associatedPostsPlaceholder,
+#technicalReportContentPlaceholder { 
+    min-height: 50px; 
+    padding: 10px;
+    background-color: #f9f9f9; 
+    border-radius: 3px;
+}
+#technicalReportContentPlaceholder > p, 
+#technicalReportContentPlaceholder > ol { 
+    font-size: 0.95em;
+    line-height: 1.7;
+    color: #444;
+}
+#technicalReportContentPlaceholder > h4 {
+     margin-top: 15px;
+     color: #333;
+     font-size: 1.1em;
+}
+
+
+#technicalReport details summary {
+    font-weight: bold;
+    cursor: pointer;
+    color: #00695c;
+    font-size: 1.1em;
+    padding: 5px 0; 
+}
+#technicalReport details[open] summary {
+    margin-bottom: 10px;
+}
+
+.sentiment-examples ul {
+    list-style-type: none;
+    padding-left: 0;
+}
+.sentiment-examples li {
+    margin-bottom: 8px;
+    padding: 8px;
+    border-radius: 3px;
+    font-size: 0.95em;
+}
+.sentiment-examples li strong {
+    margin-right: 5px;
+    padding: 2px 4px;
+    border-radius: 3px;
+    color: white;
+    font-size: 0.8em;
+}
+.sentiment-examples .positive strong { background-color: #28a745;}
+.sentiment-examples .negative strong { background-color: #dc3545;}
+.sentiment-examples .neutral strong { background-color: #6c757d;}
+
+.sentiment-examples .positive { border-left: 4px solid #28a745; background-color: #e6ffed;}
+.sentiment-examples .negative { border-left: 4px solid #dc3545; background-color: #ffebee;}
+.sentiment-examples .neutral { border-left: 4px solid #adb5bd; background-color: #f5f5f5;}
+
+
+/* Visualization specific placeholders */
+#sentimentChartContainer, 
+#networkGraphContainer, 
+#topicDistributionChartContainer, 
+#topicKeywordsContainerDetailed {
+    margin-top: 10px;
+    padding: 10px;
+    border: 1px dashed #ccc;
+    min-height: 250px; 
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: #777;
+    background-color: #fff; 
+}
+
+#visualizationPlaceholder canvas { /* For Chart.js */
+    max-width: 100%;
+    height: auto !important; 
+    max-height: 400px; 
+}
+#visualizationPlaceholder svg#networkSvg, 
+#visualizationPlaceholder svg#networkSvgTop5 { /* For SVG network */
+    width: 100%;
+    height: auto;
+    min-height: 300px;
+    max-height: 450px; 
+    display: block; 
+    margin: auto; 
+    border: 1px solid #efefef; /* Add a light border to see SVG area */
+}
+
+#associatedPostsPlaceholder ul {
+    list-style-type: none;
+    padding-left: 0;
+}
+#associatedPostsPlaceholder li {
+    background-color: #f0f0f0;
+    margin-bottom: 8px;
+    padding: 8px;
+    border-radius: 3px;
+    font-size: 0.9em;
+    border-left: 3px solid #00796b;
+}
+#associatedPostsPlaceholder h5 {
+    margin-top: 15px;
+    margin-bottom: 5px;
+    color: #004d40;
+    font-size: 1.05em;
+}
+
+
+/* Loading Indicator */
+.loading-indicator {
+    text-align: center;
+    padding: 20px;
+    font-size: 1.1em;
+    color: #00695c;
+}
+.spinner {
+    border: 4px solid #f3f3f3; /* Light grey */
+    border-top: 4px solid #00796b; /* Teal */
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    animation: spin 1s linear infinite;
+    margin: 10px auto;
+}
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+
+/* Footer */
+footer {
+    text-align: center;
+    margin-top: 30px;
+    padding: 20px 0;
+    background-color: #333;
+    color: #f4f7f6;
+    font-size: 0.9em;
+}

@@ -203,36 +203,39 @@ document.addEventListener('DOMContentLoaded', function () {
         activeAnalysisTitle.textContent = analysisTitle;
     
         try {
-            const response = await fetch('/.netlify/functions/gemini-proxy', {
+            // ----- AI Call 1: Perform the main analysis -----
+            let primaryResponse = await fetch('/.netlify/functions/gemini-proxy', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ posts: postsToAnalyze, analysisType: currentAnalysisType, options: {} }),
             });
     
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || `Server error: ${response.status}`);
+            if (!primaryResponse.ok) {
+                const errorData = await primaryResponse.json();
+                throw new Error(errorData.error || `Server error: ${primaryResponse.status}`);
             }
     
-            let resultText = await response.text();
-            
-            // NEW: More robust cleaning of the AI response to extract only the JSON object.
+            let resultText = await primaryResponse.text();
             const jsonStartIndex = resultText.indexOf('{');
             const jsonEndIndex = resultText.lastIndexOf('}');
-
             if (jsonStartIndex === -1 || jsonEndIndex === -1) {
                 throw new Error("Could not find a valid JSON object in the AI's response.");
             }
-
             const jsonString = resultText.substring(jsonStartIndex, jsonEndIndex + 1);
             const resultJson = JSON.parse(jsonString);
     
-            // --- 1. Build the Card Layout ---
+            // --- 1. Build the Card Layout & Count Sentiments ---
             let htmlOutput = '';
             const sentimentCounts = { Positive: 0, Negative: 0, Neutral: 0, Mixed: 0 };
+            let analyzedPostsCount = 0;
+
             if (resultJson.posts && Array.isArray(resultJson.posts)) {
+                analyzedPostsCount = resultJson.posts.length;
                 resultJson.posts.forEach(post => {
-                    const sentiment = post.sentiment || 'N/A';
+                    let sentiment = post.sentiment || 'N/A';
+                    // FIX: Standardize sentiment to be capitalized for correct counting
+                    sentiment = sentiment.charAt(0).toUpperCase() + sentiment.slice(1).toLowerCase();
+
                     if (sentimentCounts.hasOwnProperty(sentiment)) {
                         sentimentCounts[sentiment]++;
                     }
@@ -276,28 +279,34 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             });
     
-            // --- 3. Generate Interpretation & Insights ---
-            const totalPosts = postsToAnalyze.length;
-            const positivePercent = totalPosts > 0 ? ((sentimentCounts.Positive / totalPosts) * 100).toFixed(1) : 0;
-            const negativePercent = totalPosts > 0 ? ((sentimentCounts.Negative / totalPosts) * 100).toFixed(1) : 0;
-            interpretationPlaceholder.innerHTML = `
-                <p><strong>What these results mean:</strong> The analysis classified the ${totalPosts} posts, finding that <strong>${positivePercent}%</strong> were positive and <strong>${negativePercent}%</strong> were negative. This provides a clear gauge of the overall emotional tone in the provided text.</p>
-                <p><strong>Example Strategic Insights for PR/Ad/Marketing Professionals:</strong></p>
-                <ul>
-                    <li><strong>Amplify Positivity:</strong> If positive sentiment is high (e.g., >30-40%), identify the key themes in those posts. These are winning messages that can be amplified in marketing campaigns and PR outreach.</li>
-                    <li><strong>Address Negativity Proactively:</strong> Any significant negative sentiment provides a crucial opportunity. Analyze the justification for negative posts to understand specific complaints or issues. This allows PR teams to address problems directly and transparently.</li>
-                    <li><strong>Campaign Monitoring:</strong> Use this analysis as a benchmark. After launching a new ad or PR campaign, run the analysis again on new social media posts to measure whether the campaign has successfully shifted the conversation in a more positive direction.</li>
-                </ul>`;
-    
-            // --- Update Technical Report ---
+            // --- 3. Generate Interpretation & Insights via a Second AI Call ---
+            showLoading("AI expert is now writing strategic insights...");
+            const insightsPrompt = `You are a public relations and advertising research expert. Based on the following sentiment analysis results, provide a "What these results mean" summary and 3 "Example Strategic Insights". Results: Positive: ${sentimentCounts.Positive}, Negative: ${sentimentCounts.Negative}, Neutral: ${sentimentCounts.Neutral}, Mixed: ${sentimentCounts.Mixed}. Total Posts: ${analyzedPostsCount}.`;
+            
+            let insightsResponse = await fetch('/.netlify/functions/gemini-proxy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ posts: [insightsPrompt], analysisType: 'insights' }), // Sending a single prompt
+            });
+
+            if (!insightsResponse.ok) {
+                interpretationPlaceholder.innerHTML = "<p>Could not generate AI insights at this time.</p>";
+            } else {
+                const insightsText = await insightsResponse.text();
+                // Simple formatting for now, can be improved
+                interpretationPlaceholder.innerHTML = insightsText.replace(/\n/g, '<br>');
+            }
+
+            // --- 4. Update Technical Report ---
             technicalReportContentPlaceholder.innerHTML = `
                 <h4>Computational Techniques Used:</h4>
                 <p>The analysis was performed by making a secure API call to the Google Gemini model. The model processed the text and returned a structured JSON object containing a sentiment classification and justification for each post.</p>
                 <h4>Process of Data Analysis (Simplified for Reporting):</h4>
                 <ol>
-                    <li>The ${totalPosts} social media posts were sent to the Google Gemini API.</li>
+                    <li>The ${analyzedPostsCount} social media posts were sent to the Google Gemini API.</li>
                     <li>The AI analyzed each post for its emotional tone and classified it as 'Positive', 'Negative', 'Neutral', or 'Mixed'.</li>
                     <li>The results were aggregated and visualized in a bar chart to show the overall distribution of sentiment.</li>
+                    <li>A second AI call was made to generate strategic insights based on the sentiment distribution.</li>
                 </ol>`;
     
         } catch (error) {

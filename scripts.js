@@ -214,7 +214,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 throw new Error(errorData.error || `Server error: ${response.status}`);
             }
     
-            const resultText = await response.text();
+            let resultText = await response.text();
+            
+            // Clean the response from Gemini, which sometimes wraps it in a markdown block
+            if (resultText.startsWith("```json")) {
+                resultText = resultText.substring(7, resultText.length - 3).trim();
+            }
+
             const resultJson = JSON.parse(resultText);
     
             // --- 1. Build the Card Layout ---

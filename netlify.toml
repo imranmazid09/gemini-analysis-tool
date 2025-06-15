@@ -1,3 +1,6 @@
 [functions]
   directory = "netlify/functions"
   node_bundler = "zisi"
+
+[functions."gemini-proxy"]
+  timeout = 25

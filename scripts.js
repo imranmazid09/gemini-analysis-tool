@@ -28,13 +28,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     let currentAnalysisType = 'sentiment';
     let sentimentChartInstance = null;
-    let topicChartInstance = null;
     const MAX_POSTS = 500;
     let currentPosts = []; 
-
-    // --- Global Variables ---
-    const CLUSTER_COLORS = ["#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF", "#FF9F40", "#C9CBCF", "#FDB45C", "#4D5360", "#E040FB", "#80CBC4", "#FFAB91", "#B39DDB", "#A5D6A7", "#FFF59D"];
-
 
     // --- Event Listeners ---
     textInput.addEventListener('input', () => {
@@ -72,9 +67,6 @@ document.addEventListener('DOMContentLoaded', function () {
         if (count > MAX_POSTS) {
             postCountInfo.textContent += ` (Warning: Using first ${MAX_POSTS} posts due to limit.)`;
             postCountInfo.style.color = 'red';
-        } else if (count === 1 && textInput.value.trim() !== "" && !textInput.value.includes('\n\n') && !textInput.value.includes('\n')) {
-             postCountInfo.textContent = `Posts detected: 1 (Note: If this is a single multi-line post not separated by blank lines from others in a .txt file, it will be treated as one post. For CSV, ensure multi-line posts are properly quoted.)`;
-             postCountInfo.style.color = '#555';
         } else {
             postCountInfo.style.color = '#555';
         }
@@ -112,18 +104,13 @@ document.addEventListener('DOMContentLoaded', function () {
                         parsedCsvPosts = parsedCsvPosts.filter(post => post !== ""); 
 
                         currentPosts = parsedCsvPosts; 
-
-                        if (currentPosts.length === 1 && currentPosts[0].includes('\n') && !currentPosts[0].includes('\n\n')) {
-                            textInput.value = currentPosts[0].trimEnd() + '\n\n';
-                        } else {
-                            textInput.value = currentPosts.join('\n\n');
-                        }
+                        textInput.value = currentPosts.join('\n\n');
                         
                         updatePostCountDisplay(currentPosts.length);
                         hideLoading();
                     },
-                    error: function(error, fileObj) {
-                        console.error("PapaParse Error:", error, fileObj);
+                    error: function(error) {
+                        console.error("PapaParse Error:", error);
                         alert("Error parsing CSV file. Please ensure it's a valid CSV. Check console for details.");
                         textInput.value = ""; 
                         currentPosts = [];
@@ -167,10 +154,10 @@ document.addEventListener('DOMContentLoaded', function () {
             <h4>Process of Data Analysis (Simplified for Reporting):</h4>
             <p>A non-technical explanation of the data analysis steps will appear here.</p>
         `;
-        if (sentimentChartInstance) sentimentChartInstance.destroy();
-        if (topicChartInstance) topicChartInstance.destroy();
-        sentimentChartInstance = null;
-        topicChartInstance = null;
+        if (sentimentChartInstance) {
+            sentimentChartInstance.destroy();
+            sentimentChartInstance = null;
+        }
     }
     
     function showLoading(message = "Analyzing your text, please wait...") {
@@ -208,55 +195,99 @@ document.addEventListener('DOMContentLoaded', function () {
         let postsToAnalyze = currentPosts.slice(0, MAX_POSTS);
         
         clearOutputSections(); 
-        showLoading();
+        showLoading("Contacting AI expert for analysis...");
         outputArea.style.display = 'block'; 
     
         const selectedRadio = document.querySelector('input[name="analysisType"]:checked');
         const analysisTitle = selectedRadio ? selectedRadio.parentElement.textContent.trim() : "Analysis";
         activeAnalysisTitle.textContent = analysisTitle;
     
-        // This is the new part that calls our secure gateway function
         try {
             const response = await fetch('/.netlify/functions/gemini-proxy', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    posts: postsToAnalyze,
-                    analysisType: currentAnalysisType,
-                    // We can add specific options here later
-                    options: {} 
-                }),
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ posts: postsToAnalyze, analysisType: currentAnalysisType, options: {} }),
             });
     
             if (!response.ok) {
-                // If the server response is not good, show an error
                 const errorData = await response.json();
                 throw new Error(errorData.error || `Server error: ${response.status}`);
             }
     
             const resultText = await response.text();
-            // The response from Gemini might be a JSON string, so we try to parse it.
-            try {
-                const resultJson = JSON.parse(resultText);
-                summaryContentPlaceholder.innerHTML = `<pre>${JSON.stringify(resultJson, null, 2)}</pre>`;
-            } catch (e) {
-                // If it's not JSON, just display the raw text
-                summaryContentPlaceholder.innerHTML = `<p>${resultText}</p>`;
+            const resultJson = JSON.parse(resultText);
+    
+            // --- 1. Build the Card Layout ---
+            let htmlOutput = '';
+            const sentimentCounts = { Positive: 0, Negative: 0, Neutral: 0, Mixed: 0 };
+            if (resultJson.posts && Array.isArray(resultJson.posts)) {
+                resultJson.posts.forEach(post => {
+                    const sentiment = post.sentiment || 'N/A';
+                    if (sentimentCounts.hasOwnProperty(sentiment)) {
+                        sentimentCounts[sentiment]++;
+                    }
+                    const sentimentClass = sentiment.toLowerCase();
+                    htmlOutput += `
+                        <div class="analysis-card card-${sentimentClass}">
+                            <blockquote class="post-text">"${post.text}"</blockquote>
+                            <p class="post-sentiment"><strong>Sentiment:</strong> <span class="badge badge-${sentimentClass}">${sentiment}</span></p>
+                            <p class="post-details"><strong>Justification:</strong> ${post.details}</p>
+                        </div>
+                    `;
+                });
+            } else {
+                htmlOutput = '<p>The AI response was not in the expected format.</p>';
             }
+            summaryContentPlaceholder.innerHTML = htmlOutput;
             
-            // For now, we'll leave these sections blank
-            visualizationPlaceholder.innerHTML = '<p>Visualization will be generated based on AI results in a future step.</p>';
-            interpretationPlaceholder.innerHTML = '<p>Custom interpretation will be generated based on AI results in a future step.</p>';
+            // --- 2. Generate the Visualization ---
+            visualizationPlaceholder.innerHTML = '<canvas id="sentimentChart"></canvas>';
+            const ctx = document.getElementById('sentimentChart').getContext('2d');
+            if (sentimentChartInstance) sentimentChartInstance.destroy();
+            sentimentChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Positive', 'Negative', 'Neutral', 'Mixed'],
+                    datasets: [{
+                        label: 'Number of Posts',
+                        data: [
+                            sentimentCounts.Positive,
+                            sentimentCounts.Negative,
+                            sentimentCounts.Neutral,
+                            sentimentCounts.Mixed
+                        ],
+                        backgroundColor: ['#28a745', '#dc3545', '#6c757d', '#ffc107'],
+                    }]
+                },
+                options: {
+                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+                    responsive: true,
+                    plugins: { legend: { display: false }, title: { display: true, text: 'Sentiment Distribution' } }
+                }
+            });
+    
+            // --- 3. Generate Interpretation & Insights ---
+            const totalPosts = postsToAnalyze.length;
+            const positivePercent = totalPosts > 0 ? ((sentimentCounts.Positive / totalPosts) * 100).toFixed(1) : 0;
+            const negativePercent = totalPosts > 0 ? ((sentimentCounts.Negative / totalPosts) * 100).toFixed(1) : 0;
+            interpretationPlaceholder.innerHTML = `
+                <p><strong>What these results mean:</strong> The analysis classified the ${totalPosts} posts, finding that <strong>${positivePercent}%</strong> were positive and <strong>${negativePercent}%</strong> were negative. This provides a clear gauge of the overall emotional tone in the provided text.</p>
+                <p><strong>Example Strategic Insights for PR/Ad/Marketing Professionals:</strong></p>
+                <ul>
+                    <li><strong>Amplify Positivity:</strong> If positive sentiment is high (e.g., >30-40%), identify the key themes in those posts. These are winning messages that can be amplified in marketing campaigns and PR outreach.</li>
+                    <li><strong>Address Negativity Proactively:</strong> Any significant negative sentiment provides a crucial opportunity. Analyze the justification for negative posts to understand specific complaints or issues. This allows PR teams to address problems directly and transparently.</li>
+                    <li><strong>Campaign Monitoring:</strong> Use this analysis as a benchmark. After launching a new ad or PR campaign, run the analysis again on new social media posts to measure whether the campaign has successfully shifted the conversation in a more positive direction.</li>
+                </ul>`;
+    
+            // --- Update Technical Report ---
             technicalReportContentPlaceholder.innerHTML = `
                 <h4>Computational Techniques Used:</h4>
-                <p>The analysis was performed by making a secure call to the Google Gemini API. The front-end sent the text data to a secure serverless function, which then forwarded the request to the AI model.</p>
+                <p>The analysis was performed by making a secure API call to the Google Gemini model. The model processed the text and returned a structured JSON object containing a sentiment classification and justification for each post.</p>
                 <h4>Process of Data Analysis (Simplified for Reporting):</h4>
                 <ol>
-                    <li>The ${postsToAnalyze.length} social media posts were sent to a secure server-side function.</li>
-                    <li>The function called the Google Gemini 1.5 Flash model with a prompt to perform the requested analysis.</li>
-                    <li>The AI's response was captured and displayed directly in the results summary.</li>
+                    <li>The ${totalPosts} social media posts were sent to the Google Gemini API.</li>
+                    <li>The AI analyzed each post for its emotional tone and classified it as 'Positive', 'Negative', 'Neutral', or 'Mixed'.</li>
+                    <li>The results were aggregated and visualized in a bar chart to show the overall distribution of sentiment.</li>
                 </ol>`;
     
         } catch (error) {
@@ -267,6 +298,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    // Initialize the page
     updateControlPanels();
     updatePostCountDisplay(0);
 });

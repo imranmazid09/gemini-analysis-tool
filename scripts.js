@@ -216,12 +216,21 @@ document.addEventListener('DOMContentLoaded', function () {
             }
     
             let resultText = await primaryResponse.text();
-            const jsonStartIndex = resultText.indexOf('{');
-            const jsonEndIndex = resultText.lastIndexOf('}');
-            if (jsonStartIndex === -1 || jsonEndIndex === -1) {
-                throw new Error("Could not find a valid JSON object in the AI's response.");
+            
+            // FIX: More robust logic to find and extract the JSON object from the AI's response.
+            let jsonString = resultText;
+            if (jsonString.startsWith("```json")) {
+                jsonString = jsonString.substring(7, jsonString.length - 3).trim();
+            } else {
+                const jsonStartIndex = jsonString.indexOf('{');
+                const jsonEndIndex = jsonString.lastIndexOf('}');
+                if (jsonStartIndex !== -1 && jsonEndIndex !== -1) {
+                    jsonString = jsonString.substring(jsonStartIndex, jsonEndIndex + 1);
+                } else {
+                    throw new Error("Could not find a valid JSON object in the AI's response.");
+                }
             }
-            const jsonString = resultText.substring(jsonStartIndex, jsonEndIndex + 1);
+            
             const resultJson = JSON.parse(jsonString);
     
             // --- 1. Build the Card Layout & Count Sentiments ---

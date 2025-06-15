@@ -203,7 +203,7 @@ document.addEventListener('DOMContentLoaded', function () {
         activeAnalysisTitle.textContent = analysisTitle;
     
         try {
-            // ----- AI Call 1: Perform the main analysis -----
+            // ----- AI Call to Perform the main analysis -----
             let primaryResponse = await fetch('/.netlify/functions/gemini-proxy', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -217,7 +217,7 @@ document.addEventListener('DOMContentLoaded', function () {
     
             let resultText = await primaryResponse.text();
             
-            // FIX: More robust logic to find and extract the JSON object from the AI's response.
+            // Robust logic to find and extract the JSON object from the AI's response.
             let jsonString = resultText;
             const markdownMatch = jsonString.match(/```json\s*([\s\S]*?)\s*```/);
 
@@ -244,7 +244,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 analyzedPostsCount = resultJson.posts.length;
                 resultJson.posts.forEach(post => {
                     let sentiment = post.sentiment || 'N/A';
-                    // FIX: Standardize sentiment to be capitalized for correct counting
                     sentiment = sentiment.charAt(0).toUpperCase() + sentiment.slice(1).toLowerCase();
 
                     if (sentimentCounts.hasOwnProperty(sentiment)) {
@@ -290,23 +289,18 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             });
     
-            // --- 3. Generate Interpretation & Insights via a Second AI Call ---
-            showLoading("AI expert is now writing strategic insights...");
-            const insightsPrompt = `You are a public relations and advertising research expert. Based on the following sentiment analysis results, provide a "What these results mean" summary and 3 "Example Strategic Insights". Results: Positive: ${sentimentCounts.Positive}, Negative: ${sentimentCounts.Negative}, Neutral: ${sentimentCounts.Neutral}, Mixed: ${sentimentCounts.Mixed}. Total Posts: ${analyzedPostsCount}.`;
-            
-            let insightsResponse = await fetch('/.netlify/functions/gemini-proxy', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ posts: [insightsPrompt], analysisType: 'insights' }), // Sending a single prompt
-            });
-
-            if (!insightsResponse.ok) {
-                interpretationPlaceholder.innerHTML = "<p>Could not generate AI insights at this time.</p>";
-            } else {
-                const insightsText = await insightsResponse.text();
-                // Simple formatting for now, can be improved
-                interpretationPlaceholder.innerHTML = insightsText.replace(/\n/g, '<br>');
-            }
+            // --- 3. Generate Interpretation & Insights from a Template ---
+            const totalPosts = postsToAnalyze.length;
+            const positivePercent = totalPosts > 0 ? ((sentimentCounts.Positive / totalPosts) * 100).toFixed(1) : 0;
+            const negativePercent = totalPosts > 0 ? ((sentimentCounts.Negative / totalPosts) * 100).toFixed(1) : 0;
+            interpretationPlaceholder.innerHTML = `
+                <p><strong>What these results mean:</strong> The analysis classified the ${totalPosts} posts, finding that <strong>${positivePercent}%</strong> were positive and <strong>${negativePercent}%</strong> were negative. This provides a clear gauge of the overall emotional tone in the provided text.</p>
+                <p><strong>Example Strategic Insights for PR/Ad/Marketing Professionals:</strong></p>
+                <ul>
+                    <li><strong>Amplify Positivity:</strong> If positive sentiment is high (e.g., >30-40%), identify the key themes in those posts. These are winning messages that can be amplified in marketing campaigns and PR outreach.</li>
+                    <li><strong>Address Negativity Proactively:</strong> Any significant negative sentiment provides a crucial opportunity. Analyze the justification for negative posts to understand specific complaints or issues. This allows PR teams to address problems directly and transparently.</li>
+                    <li><strong>Campaign Monitoring:</strong> Use this analysis as a benchmark. After launching a new ad or PR campaign, run the analysis again on new social media posts to measure whether the campaign has successfully shifted the conversation in a more positive direction.</li>
+                </ul>`;
 
             // --- 4. Update Technical Report ---
             technicalReportContentPlaceholder.innerHTML = `
@@ -317,7 +311,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     <li>The ${analyzedPostsCount} social media posts were sent to the Google Gemini API.</li>
                     <li>The AI analyzed each post for its emotional tone and classified it as 'Positive', 'Negative', 'Neutral', or 'Mixed'.</li>
                     <li>The results were aggregated and visualized in a bar chart to show the overall distribution of sentiment.</li>
-                    <li>A second AI call was made to generate strategic insights based on the sentiment distribution.</li>
                 </ol>`;
     
         } catch (error) {

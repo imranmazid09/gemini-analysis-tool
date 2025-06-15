@@ -219,8 +219,10 @@ document.addEventListener('DOMContentLoaded', function () {
             
             // FIX: More robust logic to find and extract the JSON object from the AI's response.
             let jsonString = resultText;
-            if (jsonString.startsWith("```json")) {
-                jsonString = jsonString.substring(7, jsonString.length - 3).trim();
+            const markdownMatch = jsonString.match(/```json\s*([\s\S]*?)\s*```/);
+
+            if (markdownMatch && markdownMatch[1]) {
+                jsonString = markdownMatch[1];
             } else {
                 const jsonStartIndex = jsonString.indexOf('{');
                 const jsonEndIndex = jsonString.lastIndexOf('}');

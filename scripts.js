@@ -216,12 +216,16 @@ document.addEventListener('DOMContentLoaded', function () {
     
             let resultText = await response.text();
             
-            // Clean the response from Gemini, which sometimes wraps it in a markdown block
-            if (resultText.startsWith("```json")) {
-                resultText = resultText.substring(7, resultText.length - 3).trim();
+            // NEW: More robust cleaning of the AI response to extract only the JSON object.
+            const jsonStartIndex = resultText.indexOf('{');
+            const jsonEndIndex = resultText.lastIndexOf('}');
+
+            if (jsonStartIndex === -1 || jsonEndIndex === -1) {
+                throw new Error("Could not find a valid JSON object in the AI's response.");
             }
 
-            const resultJson = JSON.parse(resultText);
+            const jsonString = resultText.substring(jsonStartIndex, jsonEndIndex + 1);
+            const resultJson = JSON.parse(jsonString);
     
             // --- 1. Build the Card Layout ---
             let htmlOutput = '';

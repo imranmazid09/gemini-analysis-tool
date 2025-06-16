@@ -2,49 +2,59 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 exports.handler = async function (event) {
   if (!process.env.GEMINI_API_KEY) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: "API key not found in environment." }),
-    };
+    return { statusCode: 500, body: JSON.stringify({ error: "API key not found." })};
   }
 
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
   try {
-    const { posts } = JSON.parse(event.body);
+    const { task, posts, post, sentiment } = JSON.parse(event.body);
+    let prompt;
+    let responseData = {};
 
-    // This is the new, all-in-one prompt
-    const prompt = `
-      You are a helpful, expert social media research assistant for a university professor.
-      Your task is to analyze a series of social media posts and provide a complete report in a single, clean JSON object.
+    if (task === 'categorize') {
+      prompt = `For each of the following social media posts, classify the sentiment as "Positive", "Negative", "Neutral", or "Mixed". 
+      Your response MUST be a single JSON object with a single key "sentiments", which is an array of strings. 
+      The array must have the same number of items as the number of posts I provide.
+      
+      Posts:
+      ${posts.map(p => `- "${p}"`).join('\n')}
+      `;
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+      // Clean and parse the response
+      const jsonStartIndex = text.indexOf('{');
+      const jsonEndIndex = text.lastIndexOf('}');
+      const jsonString = text.substring(jsonStartIndex, jsonEndIndex + 1);
+      responseData = JSON.parse(jsonString);
 
-      The final JSON object MUST have two top-level keys: "post_analysis" and "strategic_insights".
+    } else if (task === 'justify') {
+      prompt = `The following social media post has been classified with a "${sentiment}" sentiment. 
+      Provide a brief, one-sentence justification for this classification.
+      Your response MUST be a single JSON object with a single key "justification", which is a string.
 
-      1.  The "post_analysis" key must contain an array of objects, where each object represents a single post and has the following three keys:
-          - "text": The original, unmodified post text.
-          - "sentiment": Your classification, which must be one of "Positive", "Negative", "Neutral", or "Mixed".
-          - "justification": A brief, one-sentence explanation for your sentiment classification.
+      Post: "${post}"
+      `;
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+      // Clean and parse the response
+      const jsonStartIndex = text.indexOf('{');
+      const jsonEndIndex = text.lastIndexOf('}');
+      const jsonString = text.substring(jsonStartIndex, jsonEndIndex + 1);
+      responseData = JSON.parse(jsonString);
 
-      2.  The "strategic_insights" key must contain an object with two keys:
-          - "summary": A paragraph starting with "What these results mean...". This should be a concise summary of the overall sentiment distribution.
-          - "insights_list": An array of exactly three strings. Each string should be a distinct, actionable strategic insight for a public relations or advertising professional, based on the analysis.
-
-      Here are the posts to analyze:
-      ${posts.join("\n-----\n")}
-    `;
-
-    const result = await model.generateContent(prompt);
-    const response = result.response;
-    const text = response.text();
+    } else {
+      throw new Error("Invalid task specified.");
+    }
 
     return {
       statusCode: 200,
-      body: text,
+      body: JSON.stringify(responseData),
     };
     
   } catch (error) {
-    console.error("Error during function execution:", error);
+    console.error("Error in Netlify function:", error);
     return {
       statusCode: 500,
       body: JSON.stringify({ error: "An error occurred inside the function." }),

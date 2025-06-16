@@ -9,64 +9,36 @@ exports.handler = async function (event) {
   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
   try {
-    const { task, post, reportData } = JSON.parse(event.body);
-    let prompt;
-    let responseData;
+    const { posts } = JSON.parse(event.body);
 
-    if (task === 'analyze_post') {
-      prompt = `You are a social media text analysis expert. Analyze the following single social media post.
-        Your response MUST be a single, clean JSON object with two keys:
-        1. "sentiment": Your classification, which must be one of "Positive", "Negative", "Neutral", or "Mixed".
-        2. "justification": A brief, one-sentence explanation for your sentiment classification.
+    // This is the new, more sophisticated prompt designed for reliability.
+    const prompt = `
+      You are a social media text analysis expert. Your task is to analyze a batch of social media posts.
+      Your response MUST be a single, clean JSON object.
+      The JSON object must have a single key "post_analysis", which is an array of objects.
 
-        Post to analyze: "${post}"
-      `;
-      // This inner try-catch handles errors from the AI model itself (e.g., on unsafe content)
-      try {
-          const result = await model.generateContent(prompt);
-          const text = result.response.text();
-          const jsonStartIndex = text.indexOf('{');
-          const jsonEndIndex = text.lastIndexOf('}');
-          if (jsonStartIndex === -1 || jsonEndIndex === -1) {
-            throw new Error("Invalid non-JSON response from AI.");
-          }
-          const jsonString = text.substring(jsonStartIndex, jsonEndIndex + 1);
-          responseData = JSON.parse(jsonString);
-      } catch (aiError) {
-          console.error("AI Model Error:", aiError);
-          // Return a structured error so the front-end knows this specific post failed
-          responseData = { sentiment: "Failed", justification: "The AI model could not process this specific post." };
-      }
+      For each post in the batch, create a corresponding object in the "post_analysis" array. Each object MUST have the following three keys:
+      1. "text": The original, unmodified post text.
+      2. "sentiment": Your classification, which must be one of "Positive", "Negative", "Neutral", or "Mixed".
+      3. "justification": A brief, one-sentence explanation for your sentiment classification.
 
-    } else if (task === 'generate_report') {
-      prompt = `You are a university professor specializing in public relations research, writing a report for undergraduate students.
-        Based on the following data summary from a sentiment analysis tool, you will perform two tasks.
-        
-        Data Summary:
-        - Total posts submitted for analysis: ${reportData.totalPosts}
-        - Posts successfully analyzed: ${reportData.successfulPosts}
-        - Sentiment Breakdown: Positive: ${reportData.sentimentCounts.Positive}, Negative: ${reportData.sentimentCounts.Negative}, Neutral: ${reportData.sentimentCounts.Neutral}, Mixed: ${reportData.sentimentCounts.Mixed}.
-        
-        Your response MUST be a single, clean JSON object with two keys: "strategic_insights" and "technical_explanation".
-        
-        1. "strategic_insights": This key should contain an object with two keys:
-           - "summary": A paragraph starting with "What these results mean...". This should be a concise summary of the overall sentiment distribution from the data provided.
-           - "insights_list": An array of exactly three strings. Each string should be a distinct, actionable strategic insight for a public relations or advertising professional.
-        
-        2. "technical_explanation": This key should contain an object with two keys:
-           - "computational_techniques": A single string explaining that the analysis used the Google Gemini model and a resilient streaming approach.
-           - "data_analysis_process": An array of three strings explaining the steps of modern, AI-based sentiment analysis for a student audience. For example, explain that unlike simple keyword matching, the AI understands context, nuance, and the relationships between words to determine the overall emotional tone.
-      `;
-      const result = await model.generateContent(prompt);
-      const text = result.response.text();
-      const jsonStartIndex = text.indexOf('{');
-      const jsonEndIndex = text.lastIndexOf('}');
-      const jsonString = text.substring(jsonStartIndex, jsonEndIndex + 1);
-      responseData = JSON.parse(jsonString);
+      IMPORTANT RELIABILITY INSTRUCTION: If you encounter a single post that is ambiguous, violates a content policy, or cannot be analyzed for any reason, you MUST still complete the analysis for all other posts. For the single problematic post, you must return a sentiment of "Failed" and a justification explaining the reason (e.g., "The content was too ambiguous to determine a clear sentiment."). A single failed post must not prevent the analysis of the others.
 
-    } else {
-      throw new Error("Invalid task specified.");
+      Analyze this batch of ${posts.length} posts:
+      ${posts.map((p, i) => `Post ${i+1}: "${p}"`).join('\n')}
+    `;
+
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+
+    // Clean and parse the response
+    const jsonStartIndex = text.indexOf('{');
+    const jsonEndIndex = text.lastIndexOf('}');
+    if (jsonStartIndex === -1 || jsonEndIndex === -1) {
+      throw new Error("Invalid non-JSON response from AI.");
     }
+    const jsonString = text.substring(jsonStartIndex, jsonEndIndex + 1);
+    const responseData = JSON.parse(jsonString);
 
     return {
       statusCode: 200,

@@ -407,3 +407,15 @@ footer {
     color: #dc3545;
     font-weight: bold;
 }
+/* --- New Inline Spinner for Justifications --- */
+.spinner-inline {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  vertical-align: text-bottom;
+  border: 0.15em solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+  margin-left: 5px;
+}

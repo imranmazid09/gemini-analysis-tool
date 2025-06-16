@@ -186,138 +186,166 @@ document.addEventListener('DOMContentLoaded', function () {
         updatePostCountDisplay(0);
     }
 
+    // --- NEW Batch Processing Analysis Function ---
     async function performAnalysis() {
         if (currentPosts.length === 0) {
             alert("Please paste or upload some text to analyze.");
             return;
         }
         
-        let postsToAnalyze = currentPosts.slice(0, MAX_POSTS);
-        
-        clearOutputSections(); 
-        showLoading("AI research assistant is analyzing your data...");
+        const postsToAnalyze = currentPosts.slice(0, MAX_POSTS);
+        const BATCH_SIZE = 25; // Analyze 25 posts per request
+        const batches = [];
+        for (let i = 0; i < postsToAnalyze.length; i += BATCH_SIZE) {
+            batches.push(postsToAnalyze.slice(i, i + BATCH_SIZE));
+        }
+
+        clearOutputSections();
+        summaryContentPlaceholder.innerHTML = ''; // Clear placeholder text
         outputArea.style.display = 'block'; 
-    
         const selectedRadio = document.querySelector('input[name="analysisType"]:checked');
         const analysisTitle = selectedRadio ? selectedRadio.parentElement.textContent.trim() : "Analysis";
         activeAnalysisTitle.textContent = analysisTitle;
-    
+
+        let allResults = [];
+        
         try {
-            const response = await fetch('/.netlify/functions/gemini-proxy', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ posts: postsToAnalyze }),
-            });
-    
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || `Server error: ${response.status}`);
-            }
-    
-            let resultText = await response.text();
-            
-            let jsonString = resultText;
-            const markdownMatch = jsonString.match(/```json\s*([\s\S]*?)\s*```/);
-            if (markdownMatch && markdownMatch[1]) {
-                jsonString = markdownMatch[1];
-            } else {
-                const jsonStartIndex = jsonString.indexOf('{');
-                const jsonEndIndex = jsonString.lastIndexOf('}');
-                if (jsonStartIndex !== -1 && jsonEndIndex !== -1) {
-                    jsonString = jsonString.substring(jsonStartIndex, jsonEndIndex + 1);
-                } else {
-                    throw new Error("Could not find a valid JSON object in the AI's response.");
-                }
-            }
-            
-            const resultJson = JSON.parse(jsonString);
-    
-            // --- 1. Populate Post-by-Post Analysis ---
-            let htmlOutput = '';
-            const sentimentCounts = { Positive: 0, Negative: 0, Neutral: 0, Mixed: 0 };
-            let analyzedPostsCount = 0;
-
-            if (resultJson.post_analysis && Array.isArray(resultJson.post_analysis)) {
-                analyzedPostsCount = resultJson.post_analysis.length;
-                resultJson.post_analysis.forEach(post => {
-                    let sentiment = post.sentiment || 'N/A';
-                    sentiment = sentiment.charAt(0).toUpperCase() + sentiment.slice(1).toLowerCase();
-                    if (sentimentCounts.hasOwnProperty(sentiment)) {
-                        sentimentCounts[sentiment]++;
-                    }
-                    const sentimentClass = sentiment.toLowerCase();
-                    htmlOutput += `
-                        <div class="analysis-card card-${sentimentClass}">
-                            <blockquote class="post-text">"${post.text}"</blockquote>
-                            <p class="post-sentiment"><strong>Sentiment:</strong> <span class="badge badge-${sentimentClass}">${sentiment}</span></p>
-                            <p class="post-details"><strong>Justification:</strong> ${post.justification || 'N/A'}</p>
-                        </div>
-                    `;
+            for (let i = 0; i < batches.length; i++) {
+                const batch = batches[i];
+                showLoading(`AI research assistant is analyzing batch ${i + 1} of ${batches.length}...`);
+                
+                const response = await fetch('/.netlify/functions/gemini-proxy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ posts: batch }),
                 });
-            } else {
-                htmlOutput = '<p>The AI response did not contain post-by-post analysis.</p>';
-            }
-            summaryContentPlaceholder.innerHTML = htmlOutput;
-            
-            // --- 2. Generate the Visualization ---
-            visualizationPlaceholder.innerHTML = '<canvas id="sentimentChart"></canvas>';
-            const ctx = document.getElementById('sentimentChart').getContext('2d');
-            if (sentimentChartInstance) sentimentChartInstance.destroy();
-            sentimentChartInstance = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: ['Positive', 'Negative', 'Neutral', 'Mixed'],
-                    datasets: [{
-                        label: 'Number of Posts',
-                        data: [
-                            sentimentCounts.Positive,
-                            sentimentCounts.Negative,
-                            sentimentCounts.Neutral,
-                            sentimentCounts.Mixed
-                        ],
-                        backgroundColor: ['#28a745', '#dc3545', '#6c757d', '#ffc107'],
-                    }]
-                },
-                options: {
-                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
-                    responsive: true,
-                    plugins: { legend: { display: false }, title: { display: true, text: 'Sentiment Distribution' } }
+
+                if (!response.ok) {
+                    // If one batch fails, we can stop or try to continue. For now, we'll stop.
+                    throw new Error(`Analysis failed on batch ${i + 1}. Server responded with status ${response.status}.`);
                 }
-            });
-    
-            // --- 3. Populate AI-Driven Interpretation & Insights ---
-            if (resultJson.strategic_insights) {
-                const insights = resultJson.strategic_insights;
-                let insightsHTML = `
-                    <p><strong>What these results mean</strong></p>
-                    <p>${insights.summary || 'Summary not provided.'}</p>
-                    <p><strong>Example Strategic Insights</strong></p>
-                    <ul>
-                        ${(insights.insights_list || []).map(item => `<li>${item}</li>`).join('')}
-                    </ul>`;
-                interpretationPlaceholder.innerHTML = insightsHTML;
-            } else {
-                interpretationPlaceholder.innerHTML = "<p>AI-powered insights were not found in the response.</p>";
+
+                let resultText = await response.text();
+                let jsonString = resultText;
+                const markdownMatch = jsonString.match(/```json\s*([\s\S]*?)\s*```/);
+                if (markdownMatch && markdownMatch[1]) {
+                    jsonString = markdownMatch[1];
+                } else {
+                    const jsonStartIndex = jsonString.indexOf('{');
+                    const jsonEndIndex = jsonString.lastIndexOf('}');
+                    if (jsonStartIndex !== -1 && jsonEndIndex !== -1) {
+                        jsonString = jsonString.substring(jsonStartIndex, jsonEndIndex + 1);
+                    } else {
+                         // Skip this batch if response is invalid, but don't crash
+                        console.error(`Could not find a valid JSON object in the AI's response for batch ${i + 1}.`);
+                        continue;
+                    }
+                }
+                
+                const resultJson = JSON.parse(jsonString);
+                if (resultJson.post_analysis && Array.isArray(resultJson.post_analysis)) {
+                    allResults.push(...resultJson.post_analysis);
+                    // Progressively render results
+                    renderBatchResults(resultJson.post_analysis);
+                }
             }
 
-            // --- 4. Update Technical Report ---
-            technicalReportContentPlaceholder.innerHTML = `
-                <h4>Computational Techniques Used:</h4>
-                <p>The analysis was performed by making a single, secure API call to the Google Gemini model. The model was instructed to return a comprehensive report including post-by-post analysis and strategic insights in a single JSON object.</p>
-                <h4>Process of Data Analysis (Simplified for Reporting):</h4>
-                <ol>
-                    <li>The ${analyzedPostsCount} social media posts were sent to the Google Gemini API.</li>
-                    <li>The AI analyzed each post for its emotional tone and provided a justification for its classification.</li>
-                    <li>The AI also generated a summary and strategic insights based on the overall sentiment distribution.</li>
-                    <li>The structured JSON response was then parsed and used to populate all sections of this report.</li>
-                </ol>`;
-    
+            // --- Final Processing After All Batches Are Complete ---
+            showLoading("Finalizing report...");
+
+            const sentimentCounts = { Positive: 0, Negative: 0, Neutral: 0, Mixed: 0 };
+            allResults.forEach(post => {
+                let sentiment = post.sentiment || 'N/A';
+                sentiment = sentiment.charAt(0).toUpperCase() + sentiment.slice(1).toLowerCase();
+                if (sentimentCounts.hasOwnProperty(sentiment)) {
+                    sentimentCounts[sentiment]++;
+                }
+            });
+
+            renderVisualization(sentimentCounts);
+            renderInterpretation(sentimentCounts, allResults.length);
+            renderTechnicalReport(allResults.length);
+
         } catch (error) {
             console.error("Analysis Error:", error);
-            summaryContentPlaceholder.innerHTML = `<p style="color:red;">An error occurred during analysis: ${error.message}. Check the console for details.</p>`;
+            summaryContentPlaceholder.innerHTML += `<p style="color:red;">An error occurred during analysis: ${error.message}. Please try again.</p>`;
         } finally {
             hideLoading();
         }
+    }
+
+    function renderBatchResults(batchResults) {
+        let htmlOutput = '';
+        batchResults.forEach(post => {
+            let sentiment = post.sentiment || 'N/A';
+            sentiment = sentiment.charAt(0).toUpperCase() + sentiment.slice(1).toLowerCase();
+            const sentimentClass = sentiment.toLowerCase();
+            htmlOutput += `
+                <div class="analysis-card card-${sentimentClass}">
+                    <blockquote class="post-text">"${post.text}"</blockquote>
+                    <p class="post-sentiment"><strong>Sentiment:</strong> <span class="badge badge-${sentimentClass}">${sentiment}</span></p>
+                    <p class="post-details"><strong>Justification:</strong> ${post.justification || 'N/A'}</p>
+                </div>
+            `;
+        });
+        summaryContentPlaceholder.innerHTML += htmlOutput;
+    }
+
+    function renderVisualization(sentimentCounts) {
+        visualizationPlaceholder.innerHTML = '<canvas id="sentimentChart"></canvas>';
+        const ctx = document.getElementById('sentimentChart').getContext('2d');
+        if (sentimentChartInstance) sentimentChartInstance.destroy();
+        sentimentChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['Positive', 'Negative', 'Neutral', 'Mixed'],
+                datasets: [{
+                    label: 'Number of Posts',
+                    data: [
+                        sentimentCounts.Positive,
+                        sentimentCounts.Negative,
+                        sentimentCounts.Neutral,
+                        sentimentCounts.Mixed
+                    ],
+                    backgroundColor: ['#28a745', '#dc3545', '#6c757d', '#ffc107'],
+                }]
+            },
+            options: {
+                scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+                responsive: true,
+                plugins: { legend: { display: false }, title: { display: true, text: 'Final Sentiment Distribution' } }
+            }
+        });
+    }
+
+    function renderInterpretation(sentimentCounts, analyzedPostsCount) {
+         if (analyzedPostsCount === 0) {
+            interpretationPlaceholder.innerHTML = "<p>No posts were successfully analyzed to generate insights.</p>";
+            return;
+        }
+        const positivePercent = analyzedPostsCount > 0 ? ((sentimentCounts.Positive / analyzedPostsCount) * 100).toFixed(1) : 0;
+        const negativePercent = analyzedPostsCount > 0 ? ((sentimentCounts.Negative / analyzedPostsCount) * 100).toFixed(1) : 0;
+        interpretationPlaceholder.innerHTML = `
+            <p><strong>What these results mean</strong></p>
+            <p>The analysis of ${analyzedPostsCount} posts shows that the conversation is ${positivePercent}% positive and ${negativePercent}% negative. This indicates the general tone of the discussion.</p>
+            <p><strong>Example Strategic Insights</strong></p>
+            <ul>
+                <li><strong>Leverage Positive Themes:</strong> Identify common topics within the 'Positive' posts. These represent what your audience enjoys and can be amplified in future content and advertising to build on existing goodwill.</li>
+                <li><strong>Address Negative Feedback:</strong> The 'Negative' posts are a valuable source of direct feedback. Analyze the justifications to pinpoint specific issues or complaints. Addressing these concerns publicly and transparently can turn a negative into a brand-building opportunity.</li>
+                <li><strong>Monitor and Adapt:</strong> This analysis serves as a snapshot in time. For any PR or marketing professional, it's crucial to repeat this analysis periodically to monitor shifts in public opinion and adapt campaign strategies accordingly.</li>
+            </ul>`;
+    }
+
+    function renderTechnicalReport(analyzedPostsCount) {
+        technicalReportContentPlaceholder.innerHTML = `
+            <h4>Computational Techniques Used:</h4>
+            <p>The analysis was performed by making multiple, secure API calls to the Google Gemini model. The full list of posts was broken into smaller batches to ensure reliability and prevent timeouts. Each batch was analyzed independently.</p>
+            <h4>Process of Data Analysis (Simplified for Reporting):</h4>
+            <ol>
+                <li>The ${analyzedPostsCount} social media posts were sent to the Google Gemini API in sequential batches.</li>
+                <li>The AI analyzed each post for its emotional tone and provided a justification for its classification.</li>
+                <li>The results from all batches were combined and aggregated to create the final visualization and report.</li>
+            </ol>`;
     }
 
     // Initialize the page

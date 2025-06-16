@@ -2,79 +2,49 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 exports.handler = async function (event) {
   if (!process.env.GEMINI_API_KEY) {
-    return { statusCode: 500, body: JSON.stringify({ error: "API key not found." })};
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: "API key not found in environment." }),
+    };
   }
 
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
   try {
-    const { task, post, reportData } = JSON.parse(event.body);
-    let prompt;
-    let responseData;
+    const { posts } = JSON.parse(event.body);
 
-    if (task === 'analyze_post') {
-      prompt = `You are a social media text analysis expert. Analyze the following single social media post.
-        Your response MUST be a single, clean JSON object with two keys:
-        1. "sentiment": Your classification, which must be one of "Positive", "Negative", "Neutral", or "Mixed".
-        2. "justification": A brief, one-sentence explanation for your sentiment classification.
+    // This is the new, all-in-one prompt
+    const prompt = `
+      You are a helpful, expert social media research assistant for a university professor.
+      Your task is to analyze a series of social media posts and provide a complete report in a single, clean JSON object.
 
-        Post to analyze: "${post}"
-      `;
-      // This inner try-catch handles errors from the AI model itself (e.g., on unsafe content)
-      try {
-          const result = await model.generateContent(prompt);
-          const text = result.response.text();
-          const jsonStartIndex = text.indexOf('{');
-          const jsonEndIndex = text.lastIndexOf('}');
-          if (jsonStartIndex === -1 || jsonEndIndex === -1) {
-            throw new Error("Invalid non-JSON response from AI.");
-          }
-          const jsonString = text.substring(jsonStartIndex, jsonEndIndex + 1);
-          responseData = JSON.parse(jsonString);
-      } catch (aiError) {
-          console.error("AI Model Error:", aiError);
-          // Return a structured error so the front-end knows this specific post failed
-          responseData = { sentiment: "Failed", justification: "The AI model could not process this specific post." };
-      }
+      The final JSON object MUST have two top-level keys: "post_analysis" and "strategic_insights".
 
-    } else if (task === 'generate_report') {
-      prompt = `You are a university professor specializing in public relations research, writing a report for undergraduate students.
-        Based on the following data summary from a sentiment analysis tool, you will perform two tasks.
-        
-        Data Summary:
-        - Total posts submitted for analysis: ${reportData.totalPosts}
-        - Posts successfully analyzed: ${reportData.successfulPosts}
-        - Sentiment Breakdown: Positive: ${reportData.sentimentCounts.Positive}, Negative: ${reportData.sentimentCounts.Negative}, Neutral: ${reportData.sentimentCounts.Neutral}, Mixed: ${reportData.sentimentCounts.Mixed}.
-        
-        Your response MUST be a single, clean JSON object with two keys: "strategic_insights" and "technical_explanation".
-        
-        1. "strategic_insights": This key should contain an object with two keys:
-           - "summary": A paragraph starting with "What these results mean...". This should be a concise summary of the overall sentiment distribution from the data provided.
-           - "insights_list": An array of exactly three strings. Each string should be a distinct, actionable strategic insight for a public relations or advertising professional.
-        
-        2. "technical_explanation": This key should contain an object with two keys:
-           - "computational_techniques": A single string explaining that the analysis used the Google Gemini model.
-           - "data_analysis_process": An array of three strings explaining the steps of modern, AI-based sentiment analysis for a student audience. For example, explain that unlike simple keyword matching, the AI understands context, nuance, and the relationships between words to determine the overall emotional tone.
-      `;
-      const result = await model.generateContent(prompt);
-      const text = result.response.text();
-      const jsonStartIndex = text.indexOf('{');
-      const jsonEndIndex = text.lastIndexOf('}');
-      const jsonString = text.substring(jsonStartIndex, jsonEndIndex + 1);
-      responseData = JSON.parse(jsonString);
+      1.  The "post_analysis" key must contain an array of objects, where each object represents a single post and has the following three keys:
+          - "text": The original, unmodified post text.
+          - "sentiment": Your classification, which must be one of "Positive", "Negative", "Neutral", or "Mixed".
+          - "justification": A brief, one-sentence explanation for your sentiment classification.
 
-    } else {
-      throw new Error("Invalid task specified.");
-    }
+      2.  The "strategic_insights" key must contain an object with two keys:
+          - "summary": A paragraph starting with "What these results mean...". This should be a concise summary of the overall sentiment distribution.
+          - "insights_list": An array of exactly three strings. Each string should be a distinct, actionable strategic insight for a public relations or advertising professional, based on the analysis.
+
+      Here are the posts to analyze:
+      ${posts.join("\n-----\n")}
+    `;
+
+    const result = await model.generateContent(prompt);
+    const response = result.response;
+    const text = response.text();
 
     return {
       statusCode: 200,
-      body: JSON.stringify(responseData),
+      body: text,
     };
     
   } catch (error) {
-    console.error("Error in Netlify function:", error);
+    console.error("Error during function execution:", error);
     return {
       statusCode: 500,
       body: JSON.stringify({ error: "An error occurred inside the function." }),

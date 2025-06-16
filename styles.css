@@ -380,3 +380,30 @@ footer {
     color: #f4f7f6;
     font-size: 0.9em;
 }
+/* --- New Live Log Styles --- */
+
+.log-message {
+    font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+    font-size: 0.9em;
+    padding: 8px 12px;
+    margin: 0 0 5px 0;
+    border-radius: 4px;
+    white-space: pre-wrap; /* Allows wrapping of long lines */
+}
+
+.log-info {
+    background-color: #eef;
+    color: #33a;
+}
+
+.log-success {
+    background-color: #e6ffed;
+    color: #28a745;
+    font-weight: bold;
+}
+
+.log-error {
+    background-color: #ffebee;
+    color: #dc3545;
+    font-weight: bold;
+}

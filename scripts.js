@@ -186,7 +186,7 @@ document.addEventListener('DOMContentLoaded', function () {
         updatePostCountDisplay(0);
     }
 
-    // --- NEW Batch Processing Analysis Function ---
+    // --- Batch Processing Analysis Function with Improved Error Handling ---
     async function performAnalysis() {
         if (currentPosts.length === 0) {
             alert("Please paste or upload some text to analyze.");
@@ -221,7 +221,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
 
                 if (!response.ok) {
-                    // If one batch fails, we can stop or try to continue. For now, we'll stop.
                     throw new Error(`Analysis failed on batch ${i + 1}. Server responded with status ${response.status}.`);
                 }
 
@@ -233,20 +232,20 @@ document.addEventListener('DOMContentLoaded', function () {
                 } else {
                     const jsonStartIndex = jsonString.indexOf('{');
                     const jsonEndIndex = jsonString.lastIndexOf('}');
-                    if (jsonStartIndex !== -1 && jsonEndIndex !== -1) {
-                        jsonString = jsonString.substring(jsonStartIndex, jsonEndIndex + 1);
-                    } else {
-                         // Skip this batch if response is invalid, but don't crash
-                        console.error(`Could not find a valid JSON object in the AI's response for batch ${i + 1}.`);
-                        continue;
+                    if (jsonStartIndex === -1 || jsonEndIndex === -1) {
+                        // FIX: Instead of continuing silently, throw an error to notify the user.
+                        throw new Error(`The AI provided an invalid response for batch ${i + 1}.`);
                     }
+                    jsonString = jsonString.substring(jsonStartIndex, jsonEndIndex + 1);
                 }
                 
                 const resultJson = JSON.parse(jsonString);
                 if (resultJson.post_analysis && Array.isArray(resultJson.post_analysis)) {
                     allResults.push(...resultJson.post_analysis);
-                    // Progressively render results
                     renderBatchResults(resultJson.post_analysis);
+                } else {
+                    // FIX: Throw an error if the expected data structure is missing.
+                    throw new Error(`The AI response for batch ${i + 1} was missing the expected 'post_analysis' data.`);
                 }
             }
 
@@ -268,7 +267,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         } catch (error) {
             console.error("Analysis Error:", error);
-            summaryContentPlaceholder.innerHTML += `<p style="color:red;">An error occurred during analysis: ${error.message}. Please try again.</p>`;
+            summaryContentPlaceholder.innerHTML += `<p style="color:red; font-weight: bold; text-align: center;">${error.message}</p>`;
         } finally {
             hideLoading();
         }

@@ -12,26 +12,27 @@ exports.handler = async function (event) {
   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
   try {
-    const { posts, analysisType } = JSON.parse(event.body);
-    let prompt;
+    const { posts } = JSON.parse(event.body);
 
-    // The handler can now process two different types of requests
-    if (analysisType === 'insights') {
-      // For insights, the "posts" array contains a single pre-formatted prompt
-      prompt = posts[0];
-    } else {
-      // This is the main sentiment analysis prompt with a strict schema
-      prompt = `You are a social media text analysis expert. For each of the following social media posts, provide a sentiment analysis.
-Your response MUST be a single JSON object.
-The JSON object should have a single key "posts", which is an array of objects.
-Each object in the "posts" array MUST have the following three keys:
-1. "text": The original, unmodified post text.
-2. "sentiment": Your classification, which must be one of "Positive", "Negative", "Neutral", or "Mixed".
-3. "justification": A brief, one-sentence explanation for your sentiment classification.
+    // This is the new, all-in-one prompt
+    const prompt = `
+      You are a helpful, expert social media research assistant for a university professor.
+      Your task is to analyze a series of social media posts and provide a complete report in a single, clean JSON object.
 
-Analyze these posts:
-${posts.join("\n-----\n")}`;
-    }
+      The final JSON object MUST have two top-level keys: "post_analysis" and "strategic_insights".
+
+      1.  The "post_analysis" key must contain an array of objects, where each object represents a single post and has the following three keys:
+          - "text": The original, unmodified post text.
+          - "sentiment": Your classification, which must be one of "Positive", "Negative", "Neutral", or "Mixed".
+          - "justification": A brief, one-sentence explanation for your sentiment classification.
+
+      2.  The "strategic_insights" key must contain an object with two keys:
+          - "summary": A paragraph starting with "What these results mean...". This should be a concise summary of the overall sentiment distribution.
+          - "insights_list": An array of exactly three strings. Each string should be a distinct, actionable strategic insight for a public relations or advertising professional, based on the analysis.
+
+      Here are the posts to analyze:
+      ${posts.join("\n-----\n")}
+    `;
 
     const result = await model.generateContent(prompt);
     const response = result.response;

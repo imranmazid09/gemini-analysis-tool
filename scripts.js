@@ -7,10 +7,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const analyzeButton = document.getElementById('analyzeButton');
     const resetButton = document.getElementById('resetButton');
     const controlsSentiment = document.getElementById('controlsSentiment');
-    const controlsNetwork = document.getElementById('controlsNetwork');
-    const controlsTopic = document.getElementById('controlsTopic');
     const outputArea = document.getElementById('outputArea');
-    const loadingIndicator = document.getElementById('loadingIndicator'); // We will still use this for the overall state
+    const loadingIndicator = document.getElementById('loadingIndicator');
     const activeAnalysisTitle = document.getElementById('activeAnalysisTitle');
     const summaryContentPlaceholder = document.getElementById('summaryContentPlaceholder');
     const visualizationPlaceholder = document.getElementById('visualizationPlaceholder');
@@ -27,15 +25,6 @@ document.addEventListener('DOMContentLoaded', function () {
     analysisTypeRadios.forEach(radio => { radio.addEventListener('change', function () { updateControlPanels(); clearOutputSections(); outputArea.style.display = 'none'; }); });
     analyzeButton.addEventListener('click', performAnalysis);
     resetButton.addEventListener('click', resetTool);
-
-    // --- NEW: Live Log Function ---
-    function logToScreen(message, type = 'info') {
-        const logEntry = document.createElement('p');
-        logEntry.textContent = message;
-        logEntry.className = `log-message log-${type}`; // e.g., log-info, log-success, log-error
-        summaryContentPlaceholder.appendChild(logEntry);
-        summaryContentPlaceholder.scrollTop = summaryContentPlaceholder.scrollHeight; // Auto-scroll to bottom
-    }
 
     // --- Core Functions (Unchanged) ---
     function getPostsFromInput(rawText) {
@@ -59,30 +48,15 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     async function handleFileUpload(event) {
         const file = event.target.files[0]; if (!file) return;
-        showLoading("Reading file...");
+        showLoading();
         try {
             const rawFileContent = await readFileAsText(file);
-            if (file.name.endsWith('.csv')) {
-                Papa.parse(rawFileContent, {
-                    skipEmptyLines: true,
-                    complete: function (results) {
-                        let parsedCsvPosts = [];
-                        if (results.data) { results.data.forEach(row => { if (row.length > 0 && row[0] !== null && row[0] !== undefined) { parsedCsvPosts.push(String(row[0]).trim()); } }); }
-                        parsedCsvPosts = parsedCsvPosts.filter(post => post !== "");
-                        currentPosts = parsedCsvPosts;
-                        textInput.value = currentPosts.join('\n\n');
-                        updatePostCountDisplay(currentPosts.length);
-                        hideLoading();
-                    }
-                });
-            } else {
-                textInput.value = rawFileContent;
-                currentPosts = getPostsFromInput(textInput.value);
-                updatePostCountDisplay(currentPosts.length);
-                hideLoading();
-            }
+            textInput.value = rawFileContent;
+            currentPosts = getPostsFromInput(textInput.value);
+            updatePostCountDisplay(currentPosts.length);
         } catch (error) {
             alert("Error reading file."); console.error("File Read Error:", error);
+        } finally {
             hideLoading();
         }
     }
@@ -93,12 +67,12 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     function clearOutputSections() {
         summaryContentPlaceholder.innerHTML = '<p>Summary of the analysis will appear here...</p>';
-        visualizationPlaceholder.innerHTML = '<p>Data visualization will appear here...</p>';
-        interpretationPlaceholder.innerHTML = '<p>Interpretation of results and example strategic insights will appear here...</p>';
+        visualizationPlaceholder.innerHTML = '';
+        interpretationPlaceholder.innerHTML = '';
         if (sentimentChartInstance) { sentimentChartInstance.destroy(); sentimentChartInstance = null; }
     }
-    function showLoading(message) { analyzeButton.disabled = true; resetButton.disabled = true; }
-    function hideLoading() { analyzeButton.disabled = false; resetButton.disabled = false; }
+    function showLoading() { analyzeButton.disabled = true; resetButton.disabled = true; loadingIndicator.style.display = 'block'; }
+    function hideLoading() { analyzeButton.disabled = false; resetButton.disabled = false; loadingIndicator.style.display = 'none';}
     function resetTool() {
         textInput.value = ''; fileUpload.value = '';
         outputArea.style.display = 'none'; clearOutputSections();
@@ -106,8 +80,10 @@ document.addEventListener('DOMContentLoaded', function () {
         currentPosts = []; updatePostCountDisplay(0);
     }
     
-    // --- NEW Live Log Analysis Function ---
+    // --- NEW Micro-Task Analysis Function ---
     async function performAnalysis() {
+        // FIX: Always get the latest posts from the text area to ensure accuracy
+        currentPosts = getPostsFromInput(textInput.value);
         if (currentPosts.length === 0) { alert("Please paste or upload some text to analyze."); return; }
         
         const postsToAnalyze = currentPosts.slice(0, MAX_POSTS);
@@ -118,66 +94,81 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         clearOutputSections();
-        summaryContentPlaceholder.innerHTML = ''; // Clear for live log
+        summaryContentPlaceholder.innerHTML = ''; // Clear for live results
         outputArea.style.display = 'block';
         showLoading();
+        loadingIndicator.querySelector('p').textContent = 'Initializing analysis...';
+
 
         const analysisTitle = document.querySelector('input[name="analysisType"]:checked').parentElement.textContent.trim();
         activeAnalysisTitle.textContent = analysisTitle;
-        logToScreen(`Initializing ${analysisTitle}...`);
-        logToScreen(`Found ${postsToAnalyze.length} posts. Processing in ${batches.length} batch(es) of ${BATCH_SIZE}.`);
-
-        let allResults = [];
         
-        for (let i = 0; i < batches.length; i++) {
-            logToScreen(`-----------------------------------\nAnalyzing batch ${i + 1} of ${batches.length}...`, 'info');
-            try {
+        let allResults = [];
+
+        try {
+            // --- Stage 1: Fast Sentiment Categorization ---
+            for (let i = 0; i < batches.length; i++) {
+                loadingIndicator.querySelector('p').textContent = `Categorizing sentiments in batch ${i + 1} of ${batches.length}...`;
                 const response = await fetch('/.netlify/functions/gemini-proxy', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ posts: batches[i] }),
+                    body: JSON.stringify({ task: 'categorize', posts: batches[i] }),
+                });
+                if (!response.ok) throw new Error(`Server error (${response.status}) during sentiment categorization.`);
+                
+                const { sentiments } = await response.json();
+                if (!sentiments || sentiments.length !== batches[i].length) throw new Error("AI did not return the correct number of sentiments for a batch.");
+
+                // Combine posts with their new sentiments
+                const categorizedPosts = batches[i].map((post, index) => ({
+                    text: post,
+                    sentiment: sentiments[index] || "Unknown",
+                }));
+                allResults.push(...categorizedPosts);
+                renderBatchResults(categorizedPosts); // Render initial cards with sentiment
+            }
+
+            // --- Stage 2: Progressive Justification & Final Report ---
+            const finalSentimentCounts = { Positive: 0, Negative: 0, Neutral: 0, Mixed: 0, Unknown: 0 };
+            for (let i = 0; i < allResults.length; i++) {
+                loadingIndicator.querySelector('p').textContent = `Generating justification ${i + 1} of ${allResults.length}...`;
+                const post = allResults[i];
+                
+                // Update final counts
+                let sentiment = post.sentiment.charAt(0).toUpperCase() + post.sentiment.slice(1).toLowerCase();
+                if (finalSentimentCounts.hasOwnProperty(sentiment)) { finalSentimentCounts[sentiment]++; }
+
+                const justResponse = await fetch('/.netlify/functions/gemini-proxy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task: 'justify', post: post.text, sentiment: post.sentiment }),
                 });
 
-                if (!response.ok) {
-                    throw new Error(`Server responded with status ${response.status}.`);
+                if (justResponse.ok) {
+                    const { justification } = await justResponse.json();
+                    post.justification = justification; // Add justification to our data
+                    updateJustificationOnScreen(i, justification); // Update the card on screen
                 }
-
-                let resultText = await response.text();
-                let jsonString = resultText;
-                const markdownMatch = jsonString.match(/```json\s*([\s\S]*?)\s*```/);
-                if (markdownMatch && markdownMatch[1]) { jsonString = markdownMatch[1]; } 
-                else {
-                    const jsonStartIndex = jsonString.indexOf('{');
-                    const jsonEndIndex = jsonString.lastIndexOf('}');
-                    if (jsonStartIndex === -1 || jsonEndIndex === -1) { throw new Error("The AI provided an invalid, non-JSON response."); }
-                    jsonString = jsonString.substring(jsonStartIndex, jsonEndIndex + 1);
-                }
-                
-                const resultJson = JSON.parse(jsonString);
-                if (resultJson.post_analysis && Array.isArray(resultJson.post_analysis)) {
-                    allResults.push(...resultJson.post_analysis);
-                    logToScreen(`✓ Success: Batch ${i + 1} analyzed.`, 'success');
-                } else {
-                    throw new Error("The AI response was missing the expected 'post_analysis' data.");
-                }
-            } catch (error) {
-                logToScreen(`✗ ERROR on batch ${i + 1}: ${error.message}. Analysis halted.`, 'error');
-                hideLoading(); // Stop the process
-                return; // Exit the function
             }
+            
+            // --- Final Render ---
+            loadingIndicator.querySelector('p').textContent = 'Finalizing report...';
+            renderVisualization(finalSentimentCounts);
+            renderInterpretation(finalSentimentCounts, allResults.length);
+            renderTechnicalReport(allResults.length);
+
+        } catch (error) {
+            console.error("Analysis Error:", error);
+            summaryContentPlaceholder.innerHTML = `<p style="color:red; font-weight: bold; text-align: center; padding: 20px;">Analysis failed: ${error.message}</p>`;
+        } finally {
+            hideLoading();
         }
-        
-        logToScreen(`-----------------------------------\n✓ All batches complete. Finalizing report...`, 'success');
-        renderFinalReport(allResults);
-        hideLoading();
     }
     
-    // --- NEW: Function to render the final report ---
-    function renderFinalReport(allResults) {
-        // Step 1: Render the cards (replaces the log)
-        summaryContentPlaceholder.innerHTML = ''; // Clear the log
+    // --- Helper Rendering Functions ---
+    function renderBatchResults(batchResults) {
         let htmlOutput = '';
-        allResults.forEach(post => {
+        batchResults.forEach(post => {
             let sentiment = post.sentiment || 'N/A';
             sentiment = sentiment.charAt(0).toUpperCase() + sentiment.slice(1).toLowerCase();
             const sentimentClass = sentiment.toLowerCase();
@@ -185,26 +176,20 @@ document.addEventListener('DOMContentLoaded', function () {
                 <div class="analysis-card card-${sentimentClass}">
                     <blockquote class="post-text">"${post.text}"</blockquote>
                     <p class="post-sentiment"><strong>Sentiment:</strong> <span class="badge badge-${sentimentClass}">${sentiment}</span></p>
-                    <p class="post-details"><strong>Justification:</strong> ${post.justification || 'N/A'}</p>
+                    <div class="justification-placeholder">Justification: <span class="spinner-inline"></span></div>
                 </div>
             `;
         });
-        summaryContentPlaceholder.innerHTML = htmlOutput;
-
-        // Step 2: Render the visualization and other sections
-        const sentimentCounts = { Positive: 0, Negative: 0, Neutral: 0, Mixed: 0 };
-        allResults.forEach(post => {
-            let sentiment = post.sentiment || 'N/A';
-            sentiment = sentiment.charAt(0).toUpperCase() + sentiment.slice(1).toLowerCase();
-            if (sentimentCounts.hasOwnProperty(sentiment)) { sentimentCounts[sentiment]++; }
-        });
-
-        renderVisualization(sentimentCounts);
-        renderInterpretation(sentimentCounts, allResults.length);
-        renderTechnicalReport(allResults.length);
+        summaryContentPlaceholder.innerHTML += htmlOutput;
     }
-    
-    // --- Helper rendering functions (Mostly unchanged) ---
+
+    function updateJustificationOnScreen(cardIndex, justification) {
+        const allPlaceholders = document.querySelectorAll('.justification-placeholder');
+        if (allPlaceholders[cardIndex]) {
+            allPlaceholders[cardIndex].innerHTML = `<strong>Justification:</strong> ${justification || 'N/A'}`;
+        }
+    }
+
     function renderVisualization(sentimentCounts) {
         visualizationPlaceholder.innerHTML = '<canvas id="sentimentChart"></canvas>';
         const ctx = document.getElementById('sentimentChart').getContext('2d');
@@ -218,10 +203,10 @@ document.addEventListener('DOMContentLoaded', function () {
         if (analyzedPostsCount === 0) { interpretationPlaceholder.innerHTML = "<p>No posts were successfully analyzed.</p>"; return; }
         const positivePercent = ((sentimentCounts.Positive / analyzedPostsCount) * 100).toFixed(1);
         const negativePercent = ((sentimentCounts.Negative / analyzedPostsCount) * 100).toFixed(1);
-        interpretationPlaceholder.innerHTML = `<p><strong>What these results mean</strong></p><p>The analysis of ${analyzedPostsCount} posts shows the conversation is ${positivePercent}% positive and ${negativePercent}% negative. This indicates the general tone of the discussion.</p><p><strong>Example Strategic Insights</strong></p><ul><li><strong>Leverage Positive Themes:</strong> Identify common topics within the 'Positive' posts. These represent what your audience enjoys and can be amplified in future content and advertising.</li><li><strong>Address Negative Feedback:</strong> The 'Negative' posts are a valuable source of direct feedback. Analyze the justifications to pinpoint specific issues. Addressing these concerns can turn a negative into a brand-building opportunity.</li><li><strong>Monitor and Adapt:</strong> This analysis is a snapshot in time. Repeat it periodically to monitor shifts in public opinion and adapt campaign strategies accordingly.</li></ul>`;
+        interpretationPlaceholder.innerHTML = `<p><strong>What these results mean</strong></p><p>The analysis of ${analyzedPostsCount} posts shows the conversation is ${positivePercent}% positive and ${negativePercent}% negative. This indicates the general tone of the discussion.</p><p><strong>Example Strategic Insights</strong></p><ul><li><strong>Leverage Positive Themes:</strong> Identify common topics within the 'Positive' posts. These represent what your audience enjoys and can be amplified in future content.</li><li><strong>Address Negative Feedback:</strong> The 'Negative' posts are a valuable source of direct feedback. Analyze the justifications to pinpoint specific issues. Addressing these concerns can turn a negative into a brand-building opportunity.</li><li><strong>Monitor and Adapt:</strong> This analysis is a snapshot in time. Repeat it periodically to monitor shifts in public opinion and adapt campaign strategies accordingly.</li></ul>`;
     }
     function renderTechnicalReport(analyzedPostsCount) {
-        technicalReportContentPlaceholder.innerHTML = `<h4>Computational Techniques Used:</h4><p>The analysis was performed by making multiple, secure API calls to the Google Gemini model. The full list of posts was broken into smaller batches to ensure reliability and prevent timeouts.</p><h4>Process of Data Analysis (Simplified for Reporting):</h4><ol><li>The ${analyzedPostsCount} social media posts were sent to the Google Gemini API in sequential batches.</li><li>The AI analyzed each post for its emotional tone and provided a justification.</li><li>The results from all batches were combined and aggregated to create the final report.</li></ol>`;
+        technicalReportContentPlaceholder.innerHTML = `<h4>Computational Techniques Used:</h4><p>The analysis was performed by making many small, secure API calls to the Google Gemini model. Posts were categorized in batches, and then justifications were generated individually for maximum reliability.</p><h4>Process of Data Analysis (Simplified for Reporting):</h4><ol><li>The ${analyzedPostsCount} social media posts were sent to the Google Gemini API in batches to classify sentiment.</li><li>For each post, a second micro-request was made to the AI to generate a justification for its classification.</li><li>The results from all requests were combined and aggregated to create the final report.</li></ol>`;
     }
 
     // Initialize the page

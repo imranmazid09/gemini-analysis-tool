@@ -233,7 +233,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     const jsonStartIndex = jsonString.indexOf('{');
                     const jsonEndIndex = jsonString.lastIndexOf('}');
                     if (jsonStartIndex === -1 || jsonEndIndex === -1) {
-                        // FIX: Instead of continuing silently, throw an error to notify the user.
                         throw new Error(`The AI provided an invalid response for batch ${i + 1}.`);
                     }
                     jsonString = jsonString.substring(jsonStartIndex, jsonEndIndex + 1);
@@ -244,7 +243,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     allResults.push(...resultJson.post_analysis);
                     renderBatchResults(resultJson.post_analysis);
                 } else {
-                    // FIX: Throw an error if the expected data structure is missing.
                     throw new Error(`The AI response for batch ${i + 1} was missing the expected 'post_analysis' data.`);
                 }
             }
@@ -267,7 +265,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
         } catch (error) {
             console.error("Analysis Error:", error);
-            summaryContentPlaceholder.innerHTML += `<p style="color:red; font-weight: bold; text-align: center;">${error.message}</p>`;
+            // FIX: More robust error display to ensure the user sees the message.
+            summaryContentPlaceholder.innerHTML = `<p style="color:red; font-weight: bold; text-align: center; padding: 20px;">${error.message}</p>`;
+            visualizationPlaceholder.innerHTML = '<p>Analysis stopped due to an error.</p>';
+            interpretationPlaceholder.innerHTML = '<p>Analysis stopped due to an error.</p>';
+            technicalReportContentPlaceholder.innerHTML = '<p>Analysis stopped due to an error.</p>';
         } finally {
             hideLoading();
         }

@@ -19,14 +19,13 @@ document.addEventListener('DOMContentLoaded', function () {
     const MAX_POSTS = 500;
     let currentPosts = [];
 
-    // --- Event Listeners ---
+    // --- Event Listeners and Helper Functions (Unchanged) ---
     textInput.addEventListener('input', () => { currentPosts = getPostsFromInput(textInput.value); updatePostCountDisplay(currentPosts.length); });
     fileUpload.addEventListener('change', handleFileUpload);
     analysisTypeRadios.forEach(radio => { radio.addEventListener('change', function () { updateControlPanels(); clearOutputSections(); outputArea.style.display = 'none'; }); });
     analyzeButton.addEventListener('click', performAnalysis);
     resetButton.addEventListener('click', resetTool);
 
-    // --- Core Functions (Unchanged) ---
     function getPostsFromInput(rawText) {
         let posts;
         if (rawText.includes('\n\n') || rawText.includes('\r\n\r\n')) { posts = rawText.split(/\n\s*\n+/).map(p => p.trim()).filter(p => p !== ''); } 
@@ -48,7 +47,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     async function handleFileUpload(event) {
         const file = event.target.files[0]; if (!file) return;
-        showLoading();
+        showLoading(); loadingIndicator.querySelector('p').textContent = 'Reading file...';
         try {
             const rawFileContent = await readFileAsText(file);
             textInput.value = rawFileContent;
@@ -69,10 +68,11 @@ document.addEventListener('DOMContentLoaded', function () {
         summaryContentPlaceholder.innerHTML = '<p>Summary of the analysis will appear here...</p>';
         visualizationPlaceholder.innerHTML = '';
         interpretationPlaceholder.innerHTML = '';
+        technicalReportContentPlaceholder.innerHTML = '';
         if (sentimentChartInstance) { sentimentChartInstance.destroy(); sentimentChartInstance = null; }
     }
     function showLoading() { analyzeButton.disabled = true; resetButton.disabled = true; loadingIndicator.style.display = 'block'; }
-    function hideLoading() { analyzeButton.disabled = false; resetButton.disabled = false; loadingIndicator.style.display = 'none';}
+    function hideLoading() { analyzeButton.disabled = false; resetButton.disabled = false; loadingIndicator.style.display = 'none'; }
     function resetTool() {
         textInput.value = ''; fileUpload.value = '';
         outputArea.style.display = 'none'; clearOutputSections();
@@ -80,116 +80,119 @@ document.addEventListener('DOMContentLoaded', function () {
         currentPosts = []; updatePostCountDisplay(0);
     }
     
-    // --- NEW Micro-Task Analysis Function ---
+    // --- NEW Resilient Stream Analysis Function ---
     async function performAnalysis() {
-        // FIX: Always get the latest posts from the text area to ensure accuracy
         currentPosts = getPostsFromInput(textInput.value);
         if (currentPosts.length === 0) { alert("Please paste or upload some text to analyze."); return; }
         
         const postsToAnalyze = currentPosts.slice(0, MAX_POSTS);
-        const BATCH_SIZE = 25;
-        const batches = [];
-        for (let i = 0; i < postsToAnalyze.length; i += BATCH_SIZE) {
-            batches.push(postsToAnalyze.slice(i, i + BATCH_SIZE));
-        }
-
+        
         clearOutputSections();
         summaryContentPlaceholder.innerHTML = ''; // Clear for live results
         outputArea.style.display = 'block';
         showLoading();
-        loadingIndicator.querySelector('p').textContent = 'Initializing analysis...';
-
-
+        
         const analysisTitle = document.querySelector('input[name="analysisType"]:checked').parentElement.textContent.trim();
         activeAnalysisTitle.textContent = analysisTitle;
         
         let allResults = [];
+        let errorCount = 0;
 
-        try {
-            // --- Stage 1: Fast Sentiment Categorization ---
-            for (let i = 0; i < batches.length; i++) {
-                loadingIndicator.querySelector('p').textContent = `Categorizing sentiments in batch ${i + 1} of ${batches.length}...`;
-                const response = await fetch('/.netlify/functions/gemini-proxy', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ task: 'categorize', posts: batches[i] }),
-                });
-                if (!response.ok) throw new Error(`Server error (${response.status}) during sentiment categorization.`);
-                
-                const { sentiments } = await response.json();
-                if (!sentiments || sentiments.length !== batches[i].length) throw new Error("AI did not return the correct number of sentiments for a batch.");
-
-                // Combine posts with their new sentiments
-                const categorizedPosts = batches[i].map((post, index) => ({
-                    text: post,
-                    sentiment: sentiments[index] || "Unknown",
-                }));
-                allResults.push(...categorizedPosts);
-                renderBatchResults(categorizedPosts); // Render initial cards with sentiment
-            }
-
-            // --- Stage 2: Progressive Justification & Final Report ---
-            const finalSentimentCounts = { Positive: 0, Negative: 0, Neutral: 0, Mixed: 0, Unknown: 0 };
-            for (let i = 0; i < allResults.length; i++) {
-                loadingIndicator.querySelector('p').textContent = `Generating justification ${i + 1} of ${allResults.length}...`;
-                const post = allResults[i];
-                
-                // Update final counts
-                let sentiment = post.sentiment.charAt(0).toUpperCase() + post.sentiment.slice(1).toLowerCase();
-                if (finalSentimentCounts.hasOwnProperty(sentiment)) { finalSentimentCounts[sentiment]++; }
-
-                const justResponse = await fetch('/.netlify/functions/gemini-proxy', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ task: 'justify', post: post.text, sentiment: post.sentiment }),
-                });
-
-                if (justResponse.ok) {
-                    const { justification } = await justResponse.json();
-                    post.justification = justification; // Add justification to our data
-                    updateJustificationOnScreen(i, justification); // Update the card on screen
-                }
-            }
+        for (let i = 0; i < postsToAnalyze.length; i++) {
+            const postText = postsToAnalyze[i];
+            loadingIndicator.querySelector('p').textContent = `Analyzing post ${i + 1} of ${postsToAnalyze.length}...`;
             
-            // --- Final Render ---
-            loadingIndicator.querySelector('p').textContent = 'Finalizing report...';
-            renderVisualization(finalSentimentCounts);
-            renderInterpretation(finalSentimentCounts, allResults.length);
-            renderTechnicalReport(allResults.length);
+            // Render a placeholder card immediately
+            const placeholderCard = renderPlaceholderCard(postText, i);
+            summaryContentPlaceholder.appendChild(placeholderCard);
+            summaryContentPlaceholder.scrollTop = summaryContentPlaceholder.scrollHeight;
 
-        } catch (error) {
-            console.error("Analysis Error:", error);
-            summaryContentPlaceholder.innerHTML = `<p style="color:red; font-weight: bold; text-align: center; padding: 20px;">Analysis failed: ${error.message}</p>`;
-        } finally {
-            hideLoading();
+            try {
+                // Retry logic: try up to 2 times
+                let result = null;
+                for (let attempt = 1; attempt <= 2; attempt++) {
+                    try {
+                        const response = await fetch('/.netlify/functions/gemini-proxy', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ post: postText }),
+                        });
+                        if (!response.ok) {
+                            throw new Error(`Server error (${response.status})`);
+                        }
+                        result = await response.json();
+                        break; // Success, exit retry loop
+                    } catch (e) {
+                        if (attempt === 2) throw e; // Final attempt failed, throw the error
+                        console.warn(`Attempt ${attempt} failed for post ${i + 1}. Retrying...`);
+                    }
+                }
+
+                if (!result || !result.sentiment || !result.justification) {
+                    throw new Error("AI returned an invalid response.");
+                }
+
+                const finalResult = { text: postText, ...result };
+                allResults.push(finalResult);
+                updateCardWithResult(i, finalResult); // Update the card with real data
+
+            } catch (error) {
+                console.error(`Failed to analyze post ${i + 1}:`, error);
+                errorCount++;
+                updateCardWithError(i, error.message); // Update the card to show an error
+            }
         }
+        
+        // --- Final Report Generation ---
+        loadingIndicator.querySelector('p').textContent = 'Finalizing report...';
+        const successfulResults = allResults.filter(r => r.sentiment); // Filter out any that might have failed
+        
+        const sentimentCounts = { Positive: 0, Negative: 0, Neutral: 0, Mixed: 0 };
+        successfulResults.forEach(post => {
+            let sentiment = (post.sentiment || 'N/A').charAt(0).toUpperCase() + post.sentiment.slice(1).toLowerCase();
+            if (sentimentCounts.hasOwnProperty(sentiment)) { sentimentCounts[sentiment]++; }
+        });
+
+        renderVisualization(sentimentCounts);
+        renderInterpretation(sentimentCounts, successfulResults.length);
+        renderTechnicalReport(postsToAnalyze.length, successfulResults.length);
+        hideLoading();
     }
     
-    // --- Helper Rendering Functions ---
-    function renderBatchResults(batchResults) {
-        let htmlOutput = '';
-        batchResults.forEach(post => {
-            let sentiment = post.sentiment || 'N/A';
-            sentiment = sentiment.charAt(0).toUpperCase() + sentiment.slice(1).toLowerCase();
-            const sentimentClass = sentiment.toLowerCase();
-            htmlOutput += `
-                <div class="analysis-card card-${sentimentClass}">
-                    <blockquote class="post-text">"${post.text}"</blockquote>
-                    <p class="post-sentiment"><strong>Sentiment:</strong> <span class="badge badge-${sentimentClass}">${sentiment}</span></p>
-                    <div class="justification-placeholder">Justification: <span class="spinner-inline"></span></div>
-                </div>
-            `;
-        });
-        summaryContentPlaceholder.innerHTML += htmlOutput;
+    // --- NEW Helper Rendering Functions for Live Updates ---
+    function renderPlaceholderCard(postText, index) {
+        const card = document.createElement('div');
+        card.className = 'analysis-card';
+        card.id = `card-${index}`;
+        card.innerHTML = `
+            <blockquote class="post-text">"${postText}"</blockquote>
+            <p class="post-sentiment"><strong>Sentiment:</strong> <span class="spinner-inline"></span></p>
+            <p class="post-details"><strong>Justification:</strong> <span class="spinner-inline"></span></p>
+        `;
+        return card;
     }
 
-    function updateJustificationOnScreen(cardIndex, justification) {
-        const allPlaceholders = document.querySelectorAll('.justification-placeholder');
-        if (allPlaceholders[cardIndex]) {
-            allPlaceholders[cardIndex].innerHTML = `<strong>Justification:</strong> ${justification || 'N/A'}`;
-        }
+    function updateCardWithResult(index, result) {
+        const card = document.getElementById(`card-${index}`);
+        if (!card) return;
+
+        let sentiment = (result.sentiment || 'N/A').charAt(0).toUpperCase() + result.sentiment.slice(1).toLowerCase();
+        const sentimentClass = sentiment.toLowerCase();
+        
+        card.classList.add(`card-${sentimentClass}`);
+        card.querySelector('.post-sentiment').innerHTML = `<strong>Sentiment:</strong> <span class="badge badge-${sentimentClass}">${sentiment}</span>`;
+        card.querySelector('.post-details').innerHTML = `<strong>Justification:</strong> ${result.justification || 'N/A'}`;
     }
 
+    function updateCardWithError(index, errorMessage) {
+        const card = document.getElementById(`card-${index}`);
+        if (!card) return;
+        card.classList.add('card-error');
+        card.querySelector('.post-sentiment').innerHTML = `<strong>Sentiment:</strong> <span class="badge badge-error">Failed</span>`;
+        card.querySelector('.post-details').innerHTML = `<strong>Error:</strong> ${errorMessage}`;
+    }
+    
+    // --- Final Report Rendering Functions ---
     function renderVisualization(sentimentCounts) {
         visualizationPlaceholder.innerHTML = '<canvas id="sentimentChart"></canvas>';
         const ctx = document.getElementById('sentimentChart').getContext('2d');
@@ -200,13 +203,13 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
     function renderInterpretation(sentimentCounts, analyzedPostsCount) {
-        if (analyzedPostsCount === 0) { interpretationPlaceholder.innerHTML = "<p>No posts were successfully analyzed.</p>"; return; }
+        if (analyzedPostsCount === 0) { interpretationPlaceholder.innerHTML = "<p>No posts were successfully analyzed to generate insights.</p>"; return; }
         const positivePercent = ((sentimentCounts.Positive / analyzedPostsCount) * 100).toFixed(1);
         const negativePercent = ((sentimentCounts.Negative / analyzedPostsCount) * 100).toFixed(1);
-        interpretationPlaceholder.innerHTML = `<p><strong>What these results mean</strong></p><p>The analysis of ${analyzedPostsCount} posts shows the conversation is ${positivePercent}% positive and ${negativePercent}% negative. This indicates the general tone of the discussion.</p><p><strong>Example Strategic Insights</strong></p><ul><li><strong>Leverage Positive Themes:</strong> Identify common topics within the 'Positive' posts. These represent what your audience enjoys and can be amplified in future content.</li><li><strong>Address Negative Feedback:</strong> The 'Negative' posts are a valuable source of direct feedback. Analyze the justifications to pinpoint specific issues. Addressing these concerns can turn a negative into a brand-building opportunity.</li><li><strong>Monitor and Adapt:</strong> This analysis is a snapshot in time. Repeat it periodically to monitor shifts in public opinion and adapt campaign strategies accordingly.</li></ul>`;
+        interpretationPlaceholder.innerHTML = `<p><strong>What these results mean</strong></p><p>Out of ${analyzedPostsCount} successfully analyzed posts, the conversation is ${positivePercent}% positive and ${negativePercent}% negative. This indicates the general tone of the discussion.</p><p><strong>Example Strategic Insights</strong></p><ul><li><strong>Leverage Positive Themes:</strong> Identify common topics within the 'Positive' posts. These represent what your audience enjoys and can be amplified in future content.</li><li><strong>Address Negative Feedback:</strong> The 'Negative' posts are a valuable source of direct feedback. Analyze the justifications to pinpoint specific issues. Addressing these concerns can turn a negative into a brand-building opportunity.</li><li><strong>Analyze Failures:</strong> If some posts failed analysis, it might indicate unusual formatting, unsupported languages, or highly ambiguous content. This itself is a finding worth noting.</li></ul>`;
     }
-    function renderTechnicalReport(analyzedPostsCount) {
-        technicalReportContentPlaceholder.innerHTML = `<h4>Computational Techniques Used:</h4><p>The analysis was performed by making many small, secure API calls to the Google Gemini model. Posts were categorized in batches, and then justifications were generated individually for maximum reliability.</p><h4>Process of Data Analysis (Simplified for Reporting):</h4><ol><li>The ${analyzedPostsCount} social media posts were sent to the Google Gemini API in batches to classify sentiment.</li><li>For each post, a second micro-request was made to the AI to generate a justification for its classification.</li><li>The results from all requests were combined and aggregated to create the final report.</li></ol>`;
+    function renderTechnicalReport(totalPosts, successfulPosts) {
+        technicalReportContentPlaceholder.innerHTML = `<h4>Computational Techniques Used:</h4><p>The analysis was performed by making secure, individual API calls for each post to the Google Gemini model. A retry-mechanism was used to handle transient network errors, ensuring maximum reliability.</p><h4>Process of Data Analysis (Simplified for Reporting):</h4><ol><li>The tool processed ${totalPosts} social media posts one by one.</li><li>For each post, it requested a sentiment classification and a justification from the AI.</li><li>${successfulPosts} posts were successfully analyzed. The results for all successful requests were combined and aggregated to create the final report and visualization.</li></ol>`;
     }
 
     // Initialize the page

@@ -195,7 +195,7 @@ document.addEventListener('DOMContentLoaded', function () {
         let postsToAnalyze = currentPosts.slice(0, MAX_POSTS);
         
         clearOutputSections(); 
-        showLoading("Contacting AI expert for analysis...");
+        showLoading("AI research assistant is analyzing your data...");
         outputArea.style.display = 'block'; 
     
         const selectedRadio = document.querySelector('input[name="analysisType"]:checked');
@@ -203,23 +203,21 @@ document.addEventListener('DOMContentLoaded', function () {
         activeAnalysisTitle.textContent = analysisTitle;
     
         try {
-            // ----- AI Call 1: Perform the main analysis -----
-            let primaryResponse = await fetch('/.netlify/functions/gemini-proxy', {
+            const response = await fetch('/.netlify/functions/gemini-proxy', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ posts: postsToAnalyze, analysisType: currentAnalysisType, options: {} }),
+                body: JSON.stringify({ posts: postsToAnalyze }),
             });
     
-            if (!primaryResponse.ok) {
-                const errorData = await primaryResponse.json();
-                throw new Error(errorData.error || `Server error: ${primaryResponse.status}`);
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `Server error: ${response.status}`);
             }
     
-            let resultText = await primaryResponse.text();
+            let resultText = await response.text();
             
             let jsonString = resultText;
             const markdownMatch = jsonString.match(/```json\s*([\s\S]*?)\s*```/);
-
             if (markdownMatch && markdownMatch[1]) {
                 jsonString = markdownMatch[1];
             } else {
@@ -234,17 +232,16 @@ document.addEventListener('DOMContentLoaded', function () {
             
             const resultJson = JSON.parse(jsonString);
     
-            // --- 1. Build the Card Layout & Count Sentiments ---
+            // --- 1. Populate Post-by-Post Analysis ---
             let htmlOutput = '';
             const sentimentCounts = { Positive: 0, Negative: 0, Neutral: 0, Mixed: 0 };
             let analyzedPostsCount = 0;
 
-            if (resultJson.posts && Array.isArray(resultJson.posts)) {
-                analyzedPostsCount = resultJson.posts.length;
-                resultJson.posts.forEach(post => {
+            if (resultJson.post_analysis && Array.isArray(resultJson.post_analysis)) {
+                analyzedPostsCount = resultJson.post_analysis.length;
+                resultJson.post_analysis.forEach(post => {
                     let sentiment = post.sentiment || 'N/A';
                     sentiment = sentiment.charAt(0).toUpperCase() + sentiment.slice(1).toLowerCase();
-
                     if (sentimentCounts.hasOwnProperty(sentiment)) {
                         sentimentCounts[sentiment]++;
                     }
@@ -258,7 +255,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     `;
                 });
             } else {
-                htmlOutput = '<p>The AI response was not in the expected format.</p>';
+                htmlOutput = '<p>The AI response did not contain post-by-post analysis.</p>';
             }
             summaryContentPlaceholder.innerHTML = htmlOutput;
             
@@ -288,43 +285,31 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             });
     
-            // --- 3. Generate Interpretation & Insights (Robust Second Stage) ---
-            showLoading("AI expert is now writing strategic insights...");
-            try {
-                const insightsPrompt = `You are a public relations and advertising research expert. Based on the following sentiment analysis results from a social media listening scan, provide a "What these results mean" summary and a bulleted list of 3 "Example Strategic Insights" for a marketing professional. The tone should be academic but accessible for undergraduate students. Results: Positive: ${sentimentCounts.Positive}, Negative: ${sentimentCounts.Negative}, Neutral: ${sentimentCounts.Neutral}, Mixed: ${sentimentCounts.Mixed}. Total Posts Analyzed: ${analyzedPostsCount}.`;
-                
-                let insightsResponse = await fetch('/.netlify/functions/gemini-proxy', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ posts: [insightsPrompt], analysisType: 'insights' }),
-                });
-
-                if (!insightsResponse.ok) {
-                    throw new Error("Insights call failed."); // This will be caught below
-                }
-                
-                const insightsText = await insightsResponse.text();
-                let formattedInsights = insightsText
-                    .replace(/\n/g, '<br>')
-                    .replace(/What these results mean/g, '<strong>What these results mean</strong>')
-                    .replace(/Example Strategic Insights/g, '<strong>Example Strategic Insights</strong>');
-                interpretationPlaceholder.innerHTML = formattedInsights;
-
-            } catch (insightsError) {
-                console.error("Could not generate AI insights:", insightsError);
-                interpretationPlaceholder.innerHTML = "<p>AI-powered insights could not be generated for this analysis. Please refer to the raw data and chart for interpretation.</p>";
+            // --- 3. Populate AI-Driven Interpretation & Insights ---
+            if (resultJson.strategic_insights) {
+                const insights = resultJson.strategic_insights;
+                let insightsHTML = `
+                    <p><strong>What these results mean</strong></p>
+                    <p>${insights.summary || 'Summary not provided.'}</p>
+                    <p><strong>Example Strategic Insights</strong></p>
+                    <ul>
+                        ${(insights.insights_list || []).map(item => `<li>${item}</li>`).join('')}
+                    </ul>`;
+                interpretationPlaceholder.innerHTML = insightsHTML;
+            } else {
+                interpretationPlaceholder.innerHTML = "<p>AI-powered insights were not found in the response.</p>";
             }
 
             // --- 4. Update Technical Report ---
             technicalReportContentPlaceholder.innerHTML = `
                 <h4>Computational Techniques Used:</h4>
-                <p>The analysis was performed by making a secure API call to the Google Gemini model. The model processed the text and returned a structured JSON object containing a sentiment classification and justification for each post.</p>
+                <p>The analysis was performed by making a single, secure API call to the Google Gemini model. The model was instructed to return a comprehensive report including post-by-post analysis and strategic insights in a single JSON object.</p>
                 <h4>Process of Data Analysis (Simplified for Reporting):</h4>
                 <ol>
                     <li>The ${analyzedPostsCount} social media posts were sent to the Google Gemini API.</li>
-                    <li>The AI analyzed each post for its emotional tone and classified it as 'Positive', 'Negative', 'Neutral', or 'Mixed'.</li>
-                    <li>The results were aggregated and visualized in a bar chart to show the overall distribution of sentiment.</li>
-                    <li>A second, independent AI call was made to generate strategic insights based on the sentiment distribution.</li>
+                    <li>The AI analyzed each post for its emotional tone and provided a justification for its classification.</li>
+                    <li>The AI also generated a summary and strategic insights based on the overall sentiment distribution.</li>
+                    <li>The structured JSON response was then parsed and used to populate all sections of this report.</li>
                 </ol>`;
     
         } catch (error) {
